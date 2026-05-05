@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Rat Raycast: The Stalker</title>
+  <style>
+    body { margin: 0; background: #000; overflow: hidden; color: #fff; font-family: monospace; }
+    canvas { 
+      display: block; 
+      width: 100vw; 
+      height: 100vh; 
+      image-rendering: pixelated; 
+      filter: contrast(1.2) brightness(1.1); 
+    }
+    #overlay {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      text-transform: uppercase;
+      letter-spacing: 0.5em;
+      font-size: 10px;
+      color: #333;
+      opacity: 0.5;
+    }
+    #vignette {
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(circle, transparent 40%, black 150%);
+      pointer-events: none;
+      z-index: 10;
+    }
+  </style>
+</head>
+<body>
+  <div id="vignette"></div>
+  <div id="overlay">YOU ARE NOT ALONE</div>
+  
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
+
+    // Maze Data
+    const map = [
+      [1,1,1,1,1,1,1,1,1,1],
+      [1,0,0,0,0,0,0,0,0,1],
+      [1,0,1,1,0,1,1,1,0,1],
+      [1,0,1,0,0,0,0,1,0,1],
+      [1,0,0,0,1,1,0,0,0,1],
+      [1,0,1,0,1,0,0,1,0,1],
+      [1,0,1,0,0,0,1,1,0,1],
+      [1,0,1,1,1,0,0,0,0,1],
+      [1,0,0,0,0,0,0,0,0,1],
+      [1,1,1,1,1,1,1,1,1,1],
+    ];
+    const MAP_SIZE = 10;
+
+    // Scene Setup
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x000000);
+    scene.fog = new THREE.FogExp2(0x000000, 0.15);
+
+    // Low-res rendering setup
+    const RENDER_W = Math.floor(window.innerWidth / 4);
+    const RENDER_H = Math.floor(window.innerHeight / 4);
+    
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
+    const renderer = new THREE.WebGLRenderer({ antialias: false });
+    renderer.setSize(RENDER_W, RENDER_H, false);
+    document.body.appendChild(renderer.domElement);
+    renderer.domElement.style.width = '100vw';
+    renderer.domElement.style.height = '100vh';
+
+    // Lighting
+    const flashlight = new THREE.SpotLight(0xffffff, 10, 15, Math.PI / 6, 0.5, 1);
+    camera.add(flashlight);
+    flashlight.position.set(0, 0, 0);
+    flashlight.target.position.set(0, 0, -1);
+    camera.add(flashlight.target);
+    scene.add(camera);
+
+    const ambient = new THREE.AmbientLight(0x050505);
+    scene.add(ambient);
+
+    // Build Maze
+    const wallGeom = new THREE.BoxGeometry(1, 2, 1);
+    const wallMat = new THREE.MeshStandardMaterial({ 
+      color: 0x111111, 
+      roughness: 0.9, 
+      metalness: 0.1,
+      wireframe: true 
+    });
+
+    for(let y = 0; y < MAP_SIZE; y++) {
+      for(let x = 0; x < MAP_SIZE; x++) {
+        if(map[y][x] === 1) {
+          const wall = new THREE.Mesh(wallGeom, wallMat);
+          wall.position.set(x, 1, y);
+          scene.add(wall);
+        }
+      }
+    }
+
+    // Floor
+    const floorGeom = new THREE.PlaneGeometry(20, 20);
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0x050505 });
+    const floor = new THREE.Mesh(floorGeom, floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.set(5, 0, 5);
+    scene.add(floor);
+
+    // Stalker State
+    const STATES = { HIDDEN: 0, STALK: 1, CHASE: 2, DASH: 3 };
+    let stalkerState = STATES.HIDDEN;
+    let stalker;
+    let stalkerTimer = 0;
+    let glitchTimer = 0;
+    let stalkerPatience = 1;
+
+    // Player State
+    camera.position.set(1.5, 0.5, 1.5);
+    let pa = 0; // Look angle
+    let pitch = 0;
+
+    // Controls
+    const keys = {};
+    window.onkeydown = (e) => keys[e.code] = true;
+    window.onkeyup = (e) => keys[e.code] = false;
+
+    window.onmousemove = (e) => {
+      if (document.pointerLockElement) {
+        pa -= e.movementX * 0.003;
+        pitch -= e.movementY * 0.003;
+        pitch = Math.max(-Math.PI/2.1, Math.min(Math.PI/2.1, pitch));
+        camera.rotation.set(pitch, pa, 0, 'YXZ');
+      }
+    };
+    window.onclick = () => renderer.domElement.requestPointerLock();
+
+    function canMove(nx, ny) {
+      const mx = Math.floor(nx + 0.5);
+      const my = Math.floor(ny + 0.5);
+      if (mx < 0 || mx >= MAP_SIZE || my < 0 || my >= MAP_SIZE) return false;
+      return map[my][mx] === 0;
+    }
+
+    const objLoader = new OBJLoader();
+    objLoader.load('model_0.obj', (obj) => {
+      obj.traverse(c => {
+        if(c.isMesh) {
+          c.material = new THREE.MeshStandardMaterial({ 
+            color: 0x000000, 
+            emissive: 0xff0000, 
+            emissiveIntensity: 0
+          });
+          // Normalize scale
+          c.geometry.computeBoundingBox();
+          c.geometry.center();
+          const box = new THREE.Box3().setFromObject(c);
+          const size = box.getSize(new THREE.Vector3());
+          const maxDim = Math.max(size.x, size.y, size.z);
+          c.scale.set(0.6/maxDim, 0.6/maxDim, 0.6/maxDim);
+        }
+      });
+      stalker = obj;
+      stalker.visible = false;
+      scene.add(stalker);
+    });
+
+    const clock = new THREE.Clock();
+
+    function loop() {
+      requestAnimationFrame(loop);
+      const dt = clock.getDelta();
+      const speed = 2 * dt;
+
+      if (keys['KeyW']) {
+        let nx = camera.position.x - Math.sin(pa) * speed;
+        let nz = camera.position.z - Math.cos(pa) * speed;
+        if (canMove(nx, camera.position.z)) camera.position.x = nx;
+        if (canMove(camera.position.x, nz)) camera.position.z = nz;
+      }
+      if (keys['KeyS']) {
+        let nx = camera.position.x + Math.sin(pa) * speed;
+        let nz = camera.position.z + Math.cos(pa) * speed;
+        if (canMove(nx, camera.position.z)) camera.position.x = nx;
+        if (canMove(camera.position.x, nz)) camera.position.z = nz;
+      }
+      if (keys['KeyA']) {
+        let nx = camera.position.x - Math.cos(pa) * speed;
+        let nz = camera.position.z + Math.sin(pa) * speed;
+        if (canMove(nx, camera.position.z)) camera.position.x = nx;
+        if (canMove(camera.position.x, nz)) camera.position.z = nz;
+      }
+      if (keys['KeyD']) {
+        let nx = camera.position.x + Math.cos(pa) * speed;
+        let nz = camera.position.z - Math.sin(pa) * speed;
+        if (canMove(nx, camera.position.z)) camera.position.x = nx;
+        if (canMove(camera.position.x, nz)) camera.position.z = nz;
+      }
+
+      // Advanced Stalker Logic
+      if (stalker) {
+        stalkerTimer += dt;
+
+        if (stalkerState === STATES.HIDDEN) {
+          if (stalkerTimer > 2) {
+            const roll = Math.random();
+            if (roll > 0.6) {
+              // Decide behavior
+              const modeRoll = Math.random();
+              if (modeRoll < 0.3) {
+                stalkerState = STATES.DASH; // Fast peek in front
+                const dist = 3 + Math.random() * 2;
+                const angle = pa + (Math.random() - 0.5) * 0.5;
+                const sx = camera.position.x - Math.sin(angle) * dist;
+                const sz = camera.position.z - Math.cos(angle) * dist;
+                if (canMove(sx, sz)) {
+                  stalker.position.set(sx, 0.3, sz);
+                  stalker.visible = true;
+                  stalkerTimer = 0;
+                }
+              } else if (modeRoll < 0.7) {
+                stalkerState = STATES.STALK; // Hiding in corner/side
+                const dist = 5 + Math.random() * 3;
+                const angle = pa + Math.PI/2 + (Math.random() - 0.5) * 2;
+                const sx = camera.position.x - Math.sin(angle) * dist;
+                const sz = camera.position.z - Math.cos(angle) * dist;
+                if (canMove(sx, sz)) {
+                  stalker.position.set(sx, 0.3, sz);
+                  stalker.visible = true;
+                  stalkerPatience = 2 + Math.random() * 3;
+                  stalkerTimer = 0;
+                }
+              } else {
+                stalkerState = STATES.CHASE; // Aggressive
+                const dist = 8 + Math.random() * 4; // Further away
+                const angle = pa + Math.PI + (Math.random() - 0.5) * 3; // Wider arc behind/side
+                const sx = camera.position.x - Math.sin(angle) * dist;
+                const sz = camera.position.z - Math.cos(angle) * dist;
+                if (canMove(sx, sz)) {
+                  stalker.position.set(sx, 0.3, sz);
+                  stalker.visible = true;
+                  stalkerTimer = 0;
+                  stalkerPatience = 1.5 + Math.random(); // Reset patience
+                }
+              }
+            }
+            if (stalkerState === STATES.HIDDEN) stalkerTimer = 0;
+          }
+        } else {
+          const toPlayer = new THREE.Vector3().subVectors(camera.position, stalker.position);
+          const dist = toPlayer.length();
+          toPlayer.y = 0;
+          toPlayer.normalize();
+          stalker.rotation.y = Math.atan2(toPlayer.x, toPlayer.z);
+
+          const dot = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).dot(new THREE.Vector3().subVectors(stalker.position, camera.position).normalize());
+          const isBeingLookedAt = dot > 0.92; // Slightly more lenient detection
+
+          if (stalkerState === STATES.DASH) {
+            if (stalkerTimer > 0.8 || isBeingLookedAt) { // Slightly longer dash
+              stalkerState = STATES.HIDDEN;
+              stalker.visible = false;
+              stalkerTimer = -1;
+            }
+          } else if (stalkerState === STATES.STALK) {
+            // Glow red eyes from distance
+            stalker.traverse(c => { if(c.isMesh) c.material.emissiveIntensity = 1.2 + Math.sin(Date.now() * 0.01) * 0.6; });
+            if (isBeingLookedAt) {
+              stalkerPatience -= dt;
+              if (stalkerPatience <= 0) {
+                stalkerState = STATES.HIDDEN;
+                stalker.visible = false;
+                glitchTimer = 0.1;
+                stalkerTimer = 0;
+              }
+            }
+            if (dist < 3.5) stalkerState = STATES.CHASE; // Switch to chase if player gets too close
+            if (stalkerTimer > 10) { stalkerState = STATES.HIDDEN; stalker.visible = false; }
+          } else if (stalkerState === STATES.CHASE) {
+            stalker.position.add(toPlayer.multiplyScalar(1.0 * dt)); // Slower chase speed
+            stalker.traverse(c => { if(c.isMesh) c.material.emissiveIntensity = 2.0; });
+            
+            if (isBeingLookedAt) {
+              stalkerPatience -= dt;
+              if (stalkerPatience < -1.5) { // Faster "give up"
+                stalkerState = STATES.HIDDEN;
+                stalker.visible = false;
+                stalkerTimer = -3;
+              }
+            }
+
+            if (dist < 0.8) {
+              glitchTimer = 1.0;
+              stalkerState = STATES.HIDDEN;
+              stalker.visible = false;
+              stalkerTimer = -3;
+            }
+          }
+        }
+      }
+
+      if (glitchTimer > 0) {
+        glitchTimer -= dt;
+        renderer.domElement.style.transform = `translate(${(Math.random()-0.5)*20}px, ${(Math.random()-0.5)*20}px)`;
+        renderer.domElement.style.filter = `contrast(${2 + Math.random()}) brightness(${1 + Math.random()}) invert(${Math.random() > 0.9 ? 1 : 0})`;
+      } else {
+        renderer.domElement.style.transform = 'none';
+        renderer.domElement.style.filter = 'contrast(1.2) brightness(1.1)';
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    window.addEventListener('resize', () => {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(Math.floor(w / 4), Math.floor(h / 4), false);
+    });
+
+    loop();
+  </script>
+</body>
+</html>

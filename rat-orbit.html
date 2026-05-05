@@ -123,8 +123,7 @@
 </head>
 <body>
   <canvas id="canvas"></canvas>
-  
-  <div id="info">Rat Orbit // Atomic Simulation</div>
+
 
   <div id="ui-container">
     <div id="tweak-ui">
@@ -150,11 +149,18 @@
         </div>
       </div>
 
-      <div class="strange-slider" id="slider-spread" data-min="0.5" data-max="8" data-val="2.5">
+      <div class="strange-slider" id="slider-spread" data-min="0.2" data-max="4" data-val="1">
         <div class="slider-text gray-text">Orbit Spread</div>
         <div class="white-text-wrap">
           <div class="slider-text white-text">Orbit Spread</div>
         </div>
+      </div>
+
+      <div class="strange-slider" id="slider-glitch" data-min="0" data-max="1" data-val="0">
+         <div class="slider-text gray-text">????</div>
+         <div class="white-text-wrap">
+           <div class="slider-text white-text">????</div>
+         </div>
       </div>
     </div>
     <img src="rat.png" id="toggle-ui" alt="rat">
@@ -187,8 +193,18 @@
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-    controls.dampingFactor = 0.05;
+    controls.dampingFactor = 0.02;
     controls.maxDistance = 500;
+    controls.enableZoom = false; 
+
+    let targetDistance = camera.position.length();
+      canvas.addEventListener('wheel', (e) => {
+       e.preventDefault();
+       const zoomAmount = e.deltaY * 0.001; 
+       targetDistance += zoomAmount * (targetDistance * 0.5);
+       targetDistance = Math.max(2, Math.min(500, targetDistance));
+    }, { passive: false });
+    
 
     const ambientLight = new THREE.AmbientLight(0xffffff, 1.5);
     scene.add(ambientLight);
@@ -200,7 +216,8 @@
       speed: 1.0,
       count: 12,
       scale: 0.8,
-      spread: 4.0,
+      spread: 1.0,
+      glitch: 0.0,
       baseRadius: 8.0
     };
 
@@ -239,7 +256,7 @@
         orbitPivot.rotation.y = Math.random() * Math.PI;
         
         // Much wider spacing
-        const radius = params.baseRadius + (i * params.spread);
+        const radius = params.baseRadius + (i * params.spread * 0.4);
         
         const ring = new THREE.Mesh(new THREE.TorusGeometry(radius, 0.01, 16, 120), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.03 }));
         orbitPivot.add(ring);
@@ -312,19 +329,45 @@
       if (Math.abs(newScale - params.scale) > 0.01) { params.scale = newScale; refreshSimulation(); }
       const newSpread = sliderStates[3].update(dt);
       if (Math.abs(newSpread - params.spread) > 0.05) { params.spread = newSpread; refreshSimulation(); }
-
+	  params.glitch = sliderStates[4].update(dt);
+		
       orbitsGroup.children.forEach(orbit => {
         const rat = orbit.children[1];
         if (rat) {
+       
           const angle = time * rat.userData.individualSpeed * params.speed + rat.userData.offset;
           rat.position.x = Math.cos(angle) * rat.userData.radius;
           rat.position.z = Math.sin(angle) * rat.userData.radius;
+
+		rat.traverse(child => {
+		        if (child.isMesh) {
+		           if (params.glitch > 0.4) {
+		             // Jitter position to simulate "pixel floating"
+		             const jitter = (params.glitch - 0.4) * 0.5;
+		             child.position.set(
+		              (Math.random() - 0.5) * jitter,
+		               (Math.random() - 0.5) * jitter,
+		               (Math.random() - 0.5) * jitter
+		             );
+		             child.material.wireframe = params.glitch > 0.8;
+		           } else {
+		             child.position.set(0, 0, 0);
+		             child.material.wireframe = false;
+		           }
+		         }
+		      });
+		          
           rat.rotation.y = -angle + Math.PI/2;
           rat.rotation.x = time * 0.15;
         }
       });
 
       orbitsGroup.rotation.y += dt * 0.04 * params.speed;
+
+	  const currentDist = camera.position.length();
+	  const newDist = currentDist + (targetDistance - currentDist) * 0.05;
+	  camera.position.setLength(newDist);
+      
       controls.update();
       renderer.render(scene, camera);
     }

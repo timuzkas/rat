@@ -33,7 +33,9 @@
     #header {
       padding: 100px 0 60px 0;
       text-align: center;
+      opacity: 0;
       user-select: none;
+      position: relative;
     }
     .rat-title {
       font-size: 160px;
@@ -43,12 +45,35 @@
       justify-content: center;
       gap: 40px;
       perspective: 1000px;
+      cursor: pointer;
+      position: relative;
+      z-index: 5;
     }
     .rat-letter {
       display: inline-block;
       transition: transform 0.2s cubic-bezier(0.1, 0.8, 0.2, 1);
-      cursor: default;
+      cursor: pointer;
       position: relative;
+      transform-style: preserve-3d;
+    }
+
+    /* Game of Life Overlay Canvas */
+    #gol-canvas {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 100%;
+      height: 100%;
+      max-width: 800px;
+      z-index: 2;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 1s ease;
+    }
+    #gol-canvas.active {
+      opacity: 0.75;
+      pointer-events: auto;
     }
 
     /* Grid Layout */
@@ -59,6 +84,7 @@
       gap: 40px;
       padding: 0 60px 100px 60px;
       transition: opacity 0.8s ease, transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+      opacity: 0;
     }
 
     .item {
@@ -71,6 +97,8 @@
       cursor: pointer;
       transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.6s ease;
       border: 1px solid #111;
+      transform: translateY(40px);
+      opacity: 0;
     }
 
     .item:hover {
@@ -175,11 +203,35 @@
     ::-webkit-scrollbar-track { background: var(--bg); }
     ::-webkit-scrollbar-thumb { background: #111; border-radius: 2px; }
     ::-webkit-scrollbar-thumb:hover { background: #222; }
+
+    #footer {
+      position: relative;
+      width: 100%;
+      text-align: center;
+      padding: 40px 0;
+      font-size: 14px;
+      letter-spacing: 0.1em;
+      color: #444;
+      background: #050505;
+      opacity: 0;
+      transition: opacity 1.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    #footer a {
+      color: #666;
+      text-decoration: none;
+      transition: color 0.3s ease;
+    }
+
+    #footer a:hover {
+      color: var(--text);
+    }
   </style>
 </head>
 <body>
 
   <header id="header">
+    <canvas id="gol-canvas"></canvas>
     <div class="rat-title" id="rat-title">
       <span class="rat-letter">r</span>
       <span class="rat-letter">a</span>
@@ -188,6 +240,10 @@
   </header>
 
   <div id="catalog"></div>
+
+  <footer id="footer">
+    made by <a href="https://timuzkas.xyz" target="_blank">timuzkas.xyz</a>
+  </footer>
 
   <div id="expanded-container">
     <div id="expanded-content">
@@ -209,10 +265,14 @@
     import * as THREE from "three";
     import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
 
-    // --- Interactive Title Logic ---
     const letters = document.querySelectorAll('.rat-letter');
+    const header = document.getElementById('header');
+    const ratTitle = document.getElementById('rat-title');
+    const golCanvas = document.getElementById('gol-canvas');
 
+    // --- Title Hover Physics ---
     window.addEventListener('mousemove', (e) => {
+      if (golActive) return; // Disable hover physics when Game of Life is active
       letters.forEach(letter => {
         const rect = letter.getBoundingClientRect();
         const letterCenterX = rect.left + rect.width / 2;
@@ -233,7 +293,167 @@
       });
     });
 
-    // --- Rat Visualizer Base Class (For Grid Previews) ---
+    // --- Conway's Game Of Life Easter Egg Logic ---
+    let clickCount = 0;
+    let clickResetTimeout = null;
+    let golActive = false;
+
+    // Game variables
+    const ctx = golCanvas.getContext('2d');
+    const resolution = 10;
+    let cols;
+    let rows;
+    let grid;
+    let golInterval = null;
+
+    ratTitle.addEventListener('click', () => {
+      if (golActive) return;
+
+      clickCount++;
+      clearTimeout(clickResetTimeout);
+
+      // Add a subtle hit shake visual response to clicking
+      letters.forEach(letter => {
+        letter.style.transition = 'none';
+        letter.style.transform = `translate(${(Math.random() - 0.5) * 30}px, ${(Math.random() - 0.5) * 30}px) scale(1.1)`;
+        setTimeout(() => {
+          letter.style.transition = 'transform 0.2s cubic-bezier(0.1, 0.8, 0.2, 1)';
+          if (!golActive) letter.style.transform = 'translate(0,0) scale(1)';
+        }, 100);
+      });
+
+      // Reset sequence counter if user waits too long between clicks
+      clickResetTimeout = setTimeout(() => {
+        clickCount = 0;
+      }, 1000);
+
+      if (clickCount >= 5) {
+        triggerGameOfLifeMorph();
+      }
+    });
+
+    function triggerGameOfLifeMorph() {
+      golActive = true;
+      
+      // Morph and fade out original letters
+      letters.forEach((letter, i) => {
+        letter.style.transition = 'all 1.5s cubic-bezier(0.16, 1, 0.3, 1)';
+        letter.style.opacity = '0';
+        letter.style.transform = `scale(0.1) rotate(${720 + (i * 180)}deg) translateY(100px)`;
+      });
+
+      setTimeout(() => {
+        ratTitle.style.display = 'none';
+      }, 1500);
+
+      // Set up and start GoL Canvas
+      resizeGolCanvas();
+      initGolGrid();
+      
+      golCanvas.classList.add('active');
+      golInterval = setInterval(stepGoL, 100);
+
+      window.addEventListener('resize', resizeGolCanvas);
+    }
+
+    function resizeGolCanvas() {
+      const rect = header.getBoundingClientRect();
+      golCanvas.width = rect.width;
+      golCanvas.height = rect.height;
+      cols = Math.floor(golCanvas.width / resolution);
+      rows = Math.floor(golCanvas.height / resolution);
+    }
+
+    function initGolGrid() {
+      grid = buildGrid();
+      // Seed with some random life
+      for (let c = 0; c < cols; c++) {
+        for (let r = 0; r < rows; r++) {
+          grid[c][r] = Math.random() > 0.85 ? 1 : 0;
+        }
+      }
+
+      // Spawn a glider structure in the middle as an initial guarantee
+      const midC = Math.floor(cols / 2);
+      const midR = Math.floor(rows / 2);
+      if (midC > 5 && midR > 5) {
+        grid[midC][midR - 1] = 1;
+        grid[midC + 1][midR] = 1;
+        grid[midC - 1][midR + 1] = 1;
+        grid[midC][midR + 1] = 1;
+        grid[midC + 1][midR + 1] = 1;
+      }
+    }
+
+    function buildGrid() {
+      return Array(cols).fill(null).map(() => Array(rows).fill(0));
+    }
+
+    function stepGoL() {
+      drawGoL();
+      
+      const next = buildGrid();
+      for (let c = 0; c < cols; c++) {
+        for (let r = 0; r < rows; r++) {
+          const state = grid[c][r];
+          
+          // Count neighbors
+          let sum = 0;
+          for (let i = -1; i < 2; i++) {
+            for (let j = -1; j < 2; j++) {
+              if (i === 0 && j === 0) continue;
+              const x = (c + i + cols) % cols;
+              const y = (r + j + rows) % rows;
+              sum += grid[x][y];
+            }
+          }
+
+          // Rules
+          if (state === 1 && (sum < 2 || sum > 3)) {
+            next[c][r] = 0;
+          } else if (state === 0 && sum === 3) {
+            next[c][r] = 1;
+          } else {
+            next[c][r] = state;
+          }
+        }
+      }
+      grid = next;
+    }
+
+    function drawGoL() {
+      ctx.clearRect(0, 0, golCanvas.width, golCanvas.height);
+      for (let c = 0; c < cols; c++) {
+        for (let r = 0; r < rows; r++) {
+          if (grid[c][r] === 1) {
+            ctx.fillStyle = '#ff4444'; // Stylistic digital neon rat red
+            ctx.fillRect(c * resolution, r * resolution, resolution - 1, resolution - 1);
+          }
+        }
+      }
+    }
+
+    // Allow user to draw in more lives on click
+    golCanvas.addEventListener('mousedown', (e) => {
+      if (!golActive) return;
+      const rect = golCanvas.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const clickY = e.clientY - rect.top;
+      const c = Math.floor(clickX / resolution);
+      const r = Math.floor(clickY / resolution);
+      if (c >= 0 && c < cols && r >= 0 && r < rows) {
+        // Toggle cell and surrounding neighbors for drawing spray impact
+        grid[c][r] = 1;
+        if (c > 0) grid[c-1][r] = 1;
+        if (c < cols-1) grid[c+1][r] = 1;
+        if (r > 0) grid[c][r-1] = 1;
+        if (r < rows-1) grid[c][r+1] = 1;
+        drawGoL();
+      }
+    });
+
+
+    // --- Original Three.js Visualizer Core ---
     class RatVisualizer {
       constructor(container, type = 'pong') {
         this.container = container;
@@ -256,6 +476,9 @@
         this.scene.add(new THREE.AmbientLight(0xffffff, 1.0));
         if (this.type === 'pong') this.setupPong();
         else if (this.type === 'orbit') this.setupOrbit();
+        else if (this.type === 'king') this.setupKing();
+        else if (this.type === 'raycast') this.setupRaycast();
+        else if (this.type === 'boxing') this.setupBoxing();
       }
 
       loadNormalizedRat(callback) {
@@ -268,8 +491,7 @@
               const box = new THREE.Box3().setFromObject(child);
               const size = box.getSize(new THREE.Vector3());
               const maxDim = Math.max(size.x, size.y, size.z) || 1;
-              const scale = 1.0 / maxDim;
-              child.scale.set(scale, scale, scale);
+              child.scale.set(1/maxDim, 1/maxDim, 1/maxDim);
             }
           });
           callback(obj);
@@ -277,109 +499,192 @@
       }
 
       setupPong() {
-        const paddleGeom = new THREE.BoxGeometry(0.2, 2.4, 0.2);
-        const paddleMat = new THREE.MeshBasicMaterial({ color: 0x222222 });
-        this.leftPaddle = new THREE.Mesh(paddleGeom, paddleMat);
-        this.rightPaddle = new THREE.Mesh(paddleGeom, paddleMat);
-        this.leftPaddle.position.x = -6;
-        this.rightPaddle.position.x = 6;
-        this.scene.add(this.leftPaddle, this.rightPaddle);
-
-        this.ball = new THREE.Group();
-        this.scene.add(this.ball);
-        this.loadNormalizedRat((obj) => {
-          obj.scale.set(0.6, 0.6, 0.6);
-          this.ball.add(obj);
+        this.loadNormalizedRat((rat) => {
+          this.rat = rat;
+          this.rat.scale.set(3,3,3);
+          this.scene.add(this.rat);
         });
-        this.ballVel = new THREE.Vector3(5, 3, 0);
+        this.paddles = [];
+        const geom = new THREE.BoxGeometry(0.5, 2, 0.5);
+        const mat = new THREE.MeshBasicMaterial({ color: 0x888888, wireframe: true });
+        const p1 = new THREE.Mesh(geom, mat);
+        p1.position.set(-6, 0, 0);
+        const p2 = p1.clone();
+        p2.position.set(6, 0, 0);
+        this.scene.add(p1, p2);
+        this.paddles.push(p1, p2);
       }
 
       setupOrbit() {
-        this.orbits = new THREE.Group();
-        this.scene.add(this.orbits);
-        const count = 5;
-        for(let i = 0; i < count; i++) {
-          const orbitGroup = new THREE.Group();
-          orbitGroup.rotation.x = Math.random() * Math.PI;
-          orbitGroup.rotation.y = Math.random() * Math.PI;
-          const rat = new THREE.Group();
-          this.loadNormalizedRat((obj) => {
-            obj.scale.set(0.5, 0.5, 0.5);
-            rat.add(obj);
-          });
-          rat.position.x = 5;
-          rat.userData.offset = Math.random() * Math.PI * 2;
-          rat.userData.speed = 0.5 + Math.random() * 1.5;
-          orbitGroup.add(rat);
-          this.orbits.add(orbitGroup);
+        this.loadNormalizedRat((rat) => {
+          this.rat = rat;
+          this.rat.scale.set(2.5,2.5,2.5);
+          this.scene.add(this.rat);
+        });
+        this.sats = [];
+        const geom = new THREE.SphereGeometry(0.2, 8, 8);
+        const mat = new THREE.MeshBasicMaterial({ color: 0x888888, wireframe: true });
+        for(let i=0; i<3; i++) {
+          const s = new THREE.Mesh(geom, mat);
+          this.scene.add(s);
+          this.sats.push(s);
         }
       }
 
-      update(dt) {
-        this.time += dt;
-        if (this.type === 'pong') {
-          this.ball.position.x += this.ballVel.x * dt;
-          this.ball.position.y += this.ballVel.y * dt;
-          if (Math.abs(this.ball.position.x) > 6) { this.ballVel.x *= -1; this.ball.position.x = Math.sign(this.ball.position.x) * 6; }
-          if (Math.abs(this.ball.position.y) > 4) { this.ballVel.y *= -1; this.ball.position.y = Math.sign(this.ball.position.y) * 4; }
-          this.leftPaddle.position.y = THREE.MathUtils.lerp(this.leftPaddle.position.y, this.ball.position.y, 0.1);
-          this.rightPaddle.position.y = THREE.MathUtils.lerp(this.rightPaddle.position.y, this.ball.position.y, 0.1);
-          this.ball.rotation.z += dt * 5;
-        } else if (this.type === 'orbit') {
-          this.orbits.children.forEach((orbit) => {
-            const rat = orbit.children[0];
-            const angle = this.time * rat.userData.speed + rat.userData.offset;
-            rat.position.x = Math.cos(angle) * 5;
-            rat.position.z = Math.sin(angle) * 5;
-            rat.rotation.y = -angle + Math.PI/2;
-          });
+      setupKing() {
+        this.loadNormalizedRat((rat) => {
+          this.rat = rat;
+          this.rat.scale.set(3,3,3);
+          this.scene.add(this.rat);
+          const crownGeom = new THREE.ConeGeometry(0.6, 0.8, 5);
+          const crownMat = new THREE.MeshBasicMaterial({ color: 0x888888, wireframe: true });
+          const crown = new THREE.Mesh(crownGeom, crownMat);
+          crown.position.y = 1.6;
+          crown.rotation.x = Math.PI;
+          this.rat.add(crown);
+        });
+      }
+
+      setupRaycast() {
+        this.loadNormalizedRat((rat) => {
+          this.rat = rat;
+          this.rat.scale.set(3,3,3);
+          this.scene.add(this.rat);
+        });
+        this.lines = [];
+        const mat = new THREE.LineBasicMaterial({ color: 0x444444 });
+        for(let i=0; i<5; i++) {
+          const points = [new THREE.Vector3(-8, (i-2)*1.5, 0), new THREE.Vector3(8, (i-2)*1.5, 0)];
+          const geom = new THREE.BufferGeometry().setFromPoints(points);
+          const line = new THREE.Line(geom, mat);
+          this.scene.add(line);
+          this.lines.push(line);
         }
+      }
+
+      setupBoxing() {
+        this.loadNormalizedRat((rat) => {
+          this.rat = rat;
+          this.rat.scale.set(3,3,3);
+          this.scene.add(this.rat);
+        });
+        const geom = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+        const mat = new THREE.MeshBasicMaterial({ color: 0x888888, wireframe: true });
+        this.glove = new THREE.Mesh(geom, mat);
+        this.glove.position.set(0, 0, 3);
+        this.scene.add(this.glove);
       }
 
       animate() {
         if (!this.active) return;
         requestAnimationFrame(() => this.animate());
-        this.update(this.clock.getDelta());
-        this.renderer.render(this.scene, this.camera);
-      }
 
-      resize() {
-        this.camera.aspect = this.container.clientWidth / this.container.clientHeight;
-        this.camera.updateProjectionMatrix();
-        this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
+        const dt = this.clock.getDelta();
+        this.time += dt;
+
+        if (this.rat) {
+          this.rat.rotation.y = this.time * 0.5;
+        }
+
+        if (this.type === 'pong' && this.rat) {
+          this.rat.position.x = Math.sin(this.time * 2) * 4;
+          this.rat.position.y = Math.abs(Math.cos(this.time * 2)) * 2 - 1;
+          this.paddles[0].position.y = THREE.MathUtils.lerp(this.paddles[0].position.y, this.rat.position.y, 0.1);
+          this.paddles[1].position.y = THREE.MathUtils.lerp(this.paddles[1].position.y, this.rat.position.y, 0.1);
+        }
+
+        if (this.type === 'orbit') {
+          this.sats.forEach((s, i) => {
+            const angle = this.time * 1.5 + (i * Math.PI * 2 / 3);
+            s.position.set(Math.cos(angle) * 3, Math.sin(this.time + i) * 1, Math.sin(angle) * 3);
+          });
+        }
+
+        if (this.type === 'king' && this.rat) {
+          this.rat.position.y = Math.sin(this.time * 2) * 0.3;
+          this.rat.rotation.z = Math.sin(this.time * 3) * 0.1;
+        }
+
+        if (this.type === 'raycast' && this.rat) {
+          this.rat.position.x = Math.sin(this.time) * 3;
+          this.rat.position.y = Math.cos(this.time * 1.5) * 2;
+        }
+
+        if (this.type === 'boxing' && this.rat) {
+          this.glove.position.z = 2 + Math.abs(Math.sin(this.time * 4)) * 3;
+          this.rat.position.z = -Math.max(0, (this.glove.position.z - 3.5)) * 0.5;
+        }
+
+        this.renderer.render(this.scene, this.camera);
       }
 
       destroy() {
         this.active = false;
         this.renderer.dispose();
-        if (this.container.contains(this.renderer.domElement)) this.container.removeChild(this.renderer.domElement);
+        if (this.container.contains(this.renderer.domElement)) {
+          this.container.removeChild(this.renderer.domElement);
+        }
       }
     }
 
+    // --- Init Catalog Items ---
     const catalogData = [
-      { id: 'pong', title: 'Rat Pong', type: 'pong', url: 'rat-pong.html' },
-      { id: 'orbit', title: 'Rat Orbit', type: 'orbit', url: 'rat-orbit.html' }
+      { id: 1, title: 'rat boxing', type: 'boxing', url: 'rat-boxing.html' },
+      { id: 2, title: 'rat pong', type: 'pong', url: '#' },
+      { id: 3, title: 'orbit rat', type: 'orbit', url: '#' },
+      { id: 4, title: 'king rat', type: 'king', url: '#' },
+      { id: 5, title: 'raycast rat', type: 'raycast', url: '#' },
     ];
 
     const catalogEl = document.getElementById('catalog');
     const expandedContainer = document.getElementById('expanded-container');
     const gameFrame = document.getElementById('game-frame');
     const backBtn = document.getElementById('back-btn');
-    let activeVisualizers = [];
+    const footer = document.getElementById('footer');
+    const activeVisualizers = [];
 
-    function initCatalog() {
+    function runIntro() {
+      const header = document.getElementById('header');
+      header.style.transition = 'opacity 1.5s ease';
+      header.style.opacity = '1';
+
+      setTimeout(() => {
+        catalogEl.style.opacity = '1';
+        const items = document.querySelectorAll('.item');
+        items.forEach((item, index) => {
+          setTimeout(() => {
+            item.style.transition = 'all 1s cubic-bezier(0.16, 1, 0.3, 1)';
+            item.style.transform = 'translateY(0)';
+            item.style.opacity = '1';
+          }, index * 150);
+        });
+      }, 500);
+
+      setTimeout(() => {
+        footer.style.opacity = '1';
+      }, 1500);
+    }
+
+    if (catalogEl) {
       catalogData.forEach(data => {
         const item = document.createElement('div');
         item.className = 'item';
-        item.innerHTML = `<div class="item-canvas-container"></div><div class="item-info"><div class="item-title">${data.title}</div></div>`;
+        item.innerHTML = `
+          <div class="item-canvas-container"></div>
+          <div class="item-info">
+            <div class="item-title">${data.title}</div>
+          </div>
+        `;
         catalogEl.appendChild(item);
         const container = item.querySelector('.item-canvas-container');
         activeVisualizers.push(new RatVisualizer(container, data.type));
         item.addEventListener('click', () => expandItem(data, item));
       });
+      runIntro();
     }
 
     function expandItem(data, itemEl) {
+      if (data.url === '#') return; // Prevent expanding placeholders
       const rect = itemEl.getBoundingClientRect();
       const overlay = document.createElement('div');
       overlay.className = 'zoom-overlay';
@@ -403,11 +708,10 @@
     backBtn.addEventListener('click', () => {
       document.body.classList.remove('zoomed');
       expandedContainer.classList.remove('active');
-      gameFrame.src = '';
+      setTimeout(() => {
+        gameFrame.src = '';
+      }, 600);
     });
-
-    window.addEventListener('resize', () => activeVisualizers.forEach(v => v.resize()));
-    initCatalog();
   </script>
 </body>
 </html>
