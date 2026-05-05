@@ -2,11 +2,7 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Copy server script and all game files into the container
-COPY server.js ./
-COPY index.html ./
-COPY rat-boxing.html ./
-# Include assets if they are in the root directory
+# Copy everything from the directory into the container
 COPY . .
 
 EXPOSE 3000
