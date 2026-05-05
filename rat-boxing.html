@@ -184,7 +184,7 @@
       import * as THREE from "three";
       import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
   
-      const RAT_MAX_HEALTH = 200;
+      const RAT_MAX_HEALTH = 250;
       const PLAYER_MAX_HEALTH = 100;
       const PUNCH_COOLDOWN = 800;
       const DODGE_STRENGTH = 6;
@@ -431,7 +431,7 @@ setTimeout(() => (isPausing = false), 50);
             if (targetCrouchY > 1.5) dodged = true;
       
             if (!dodged) {
-              playerHealth -= 20;
+              playerHealth -= 25;
               updateUI();
               flash(0xff0000, 0.6, 15);
               if (playerHealth <= 0) triggerKO("player");
