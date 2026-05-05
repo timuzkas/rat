@@ -25,13 +25,15 @@ const MIME_TYPES = {
 };
 
 const server = http.createServer((req, res) => {
-  let filePath = '.' + req.url;
-  if (filePath === './') {
-    filePath = './index.html';
-  } else if (filePath === './favicon.ico') {
-    filePath = './rat.ico';
+  let requestPath = req.url;
+  
+  if (requestPath === '/') {
+    requestPath = '/index.html';
+  } else if (requestPath === '/favicon.ico' || requestPath === '/rat.ico') {
+    requestPath = '/rat.ico';
   }
 
+  const filePath = path.join(__dirname, requestPath);
   const extname = String(path.extname(filePath)).toLowerCase();
   const contentType = MIME_TYPES[extname] || 'application/octet-stream';
 
@@ -42,11 +44,11 @@ const server = http.createServer((req, res) => {
         res.end('File not found');
       } else {
         res.writeHead(500);
-        res.end('Sorry, check with the site admin for error: ' + error.code + ' ..\n');
+        res.end('Error: ' + error.code + '\n');
       }
     } else {
       res.writeHead(200, { 'Content-Type': contentType });
-      res.end(content, 'utf-8');
+      res.end(content);
     }
   });
 });
