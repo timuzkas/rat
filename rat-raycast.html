@@ -203,9 +203,9 @@
         stalkerTimer += dt;
 
         if (stalkerState === STATES.HIDDEN) {
-          if (stalkerTimer > 2) {
+          if (stalkerTimer > 1.2) {
             const roll = Math.random();
-            if (roll > 0.6) {
+            if (roll > 0.3) {
               const modeRoll = Math.random();
               if (modeRoll < 0.3) {
                 stalkerState = STATES.DASH;
@@ -280,8 +280,8 @@
             stalker.traverse(c => { if(c.isMesh) c.material.emissiveIntensity = 2.0; });
             
             if (isBeingLookedAt) {
-              stalkerPatience -= dt;
-              if (stalkerPatience < -1.5) {
+              stalkerPatience -= dt * 0.75;
+              if (stalkerPatience < -2.0) {
                 stalkerState = STATES.HIDDEN;
                 stalker.visible = false;
                 stalkerTimer = -3;
