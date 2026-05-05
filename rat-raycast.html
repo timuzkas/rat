@@ -204,48 +204,41 @@
 
         if (stalkerState === STATES.HIDDEN) {
           if (stalkerTimer > 1.2) {
-            const roll = Math.random();
-            if (roll > 0.3) {
-              const modeRoll = Math.random();
-              if (modeRoll < 0.3) {
-                stalkerState = STATES.DASH;
-                const dist = 3 + Math.random() * 2;
-                const angle = pa + (Math.random() - 0.5) * 0.5;
-                const sx = camera.position.x - Math.sin(angle) * dist;
-                const sz = camera.position.z - Math.cos(angle) * dist;
-                if (canMove(sx, sz)) {
-                  stalker.position.set(sx, 0.3, sz);
-                  stalker.visible = true;
-                  stalkerTimer = 0;
-                }
-              } else if (modeRoll < 0.7) {
-                stalkerState = STATES.STALK;
-                const dist = 5 + Math.random() * 3;
-                const angle = pa + Math.PI/2 + (Math.random() - 0.5) * 2;
-                const sx = camera.position.x - Math.sin(angle) * dist;
-                const sz = camera.position.z - Math.cos(angle) * dist;
-                if (canMove(sx, sz)) {
-                  stalker.position.set(sx, 0.3, sz);
-                  stalker.visible = true;
-                  stalkerPatience = 2 + Math.random() * 3;
-                  stalkerTimer = 0;
-                }
-              } else {
-                stalkerState = STATES.CHASE;
-                const dist = 8 + Math.random() * 4;
-                const angle = pa + Math.PI + (Math.random() - 0.5) * 3;
-                const sx = camera.position.x - Math.sin(angle) * dist;
-                const sz = camera.position.z - Math.cos(angle) * dist;
-                if (canMove(sx, sz)) {
-                  stalker.position.set(sx, 0.3, sz);
-                  stalker.visible = true;
-                  stalkerTimer = 0;
-                  stalkerPatience = 1.5 + Math.random();
-                }
-              }
-            }
-            if (stalkerState === STATES.HIDDEN) stalkerTimer = 0;
-          }
+                      const modeRoll = Math.random();
+                      let spawned = false;
+                      let attempts = 0;
+                      while (!spawned && attempts < 10) {
+                        attempts++;
+                        let dist, angle;
+                        if (modeRoll < 0.3) {
+                          dist = 2 + Math.random() * 2;
+                        angle = pa + (Math.random() - 0.5) * 0.8;
+                    } else if (modeRoll < 0.6) {
+                      dist = 4 + Math.random() * 2;
+                      angle = pa + Math.PI / 2 + (Math.random() - 0.5) * 2;
+                     } else {
+                        dist = 6 + Math.random() * 3;
+                       angle = pa + Math.PI + (Math.random() - 0.5) * 3;
+                     }
+                     const sx = camera.position.x - Math.sin(angle) * dist;
+                     const sz = camera.position.z - Math.cos(angle) * dist;
+                     if (canMove(sx, sz)) {
+                       stalker.position.set(sx, 0.3, sz);
+                       stalker.visible = true;
+                       stalkerTimer = 0;
+                       spawned = true;
+                       if (modeRoll < 0.3) stalkerState = STATES.DASH;
+                       else if (modeRoll < 0.6) {
+                         stalkerState = STATES.STALK;
+                         stalkerPatience = 1 + Math.random() * 2;
+                       } else {
+                         stalkerState = STATES.CHASE;
+                         stalkerPatience = 2 + Math.random() * 2;
+                       }
+                     }
+                   }
+                   if (!spawned) stalkerTimer = 0.4;
+                 }
         } else {
           const toPlayer = new THREE.Vector3().subVectors(camera.position, stalker.position);
           const dist = toPlayer.length();
