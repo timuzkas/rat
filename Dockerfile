@@ -7,7 +7,7 @@ COPY server.js ./
 COPY index.html ./
 COPY rat-boxing.html ./
 # Include assets if they are in the root directory
-COPY *.obj *.png ./
+COPY . .
 
 EXPOSE 3000
 
