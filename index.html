@@ -29,7 +29,6 @@
       min-height: 100vh;
     }
 
-    /* Interactive Title */
     #header {
       padding: 100px 0 60px 0;
       text-align: center;
@@ -57,7 +56,6 @@
       transform-style: preserve-3d;
     }
 
-    /* Game of Life Overlay Canvas */
     #gol-canvas {
       position: absolute;
       top: 0;
@@ -76,7 +74,6 @@
       pointer-events: auto;
     }
 
-    /* Grid Layout */
     #catalog {
       display: flex;
       justify-content: center;
@@ -136,7 +133,6 @@
       color: #888;
     }
 
-    /* Expanded View */
     #expanded-container {
       position: fixed;
       inset: 0;
@@ -164,7 +160,6 @@
       border: none;
     }
 
-    /* Back Button */
     .back-btn {
       position: absolute;
       top: 40px;
@@ -182,7 +177,6 @@
       transform: scale(1.1) rotate(-8deg);
     }
 
-    /* Zoom Overlay */
     .zoom-overlay {
       position: fixed;
       z-index: 2000;
@@ -270,9 +264,8 @@
     const ratTitle = document.getElementById('rat-title');
     const golCanvas = document.getElementById('gol-canvas');
 
-    // --- Title Hover Physics ---
     window.addEventListener('mousemove', (e) => {
-      if (golActive) return; // Disable hover physics when Game of Life is active
+      if (golActive) return;
       letters.forEach(letter => {
         const rect = letter.getBoundingClientRect();
         const letterCenterX = rect.left + rect.width / 2;
@@ -293,12 +286,10 @@
       });
     });
 
-    // --- Conway's Game Of Life Easter Egg Logic ---
     let clickCount = 0;
     let clickResetTimeout = null;
     let golActive = false;
 
-    // Game variables
     const ctx = golCanvas.getContext('2d');
     const resolution = 10;
     let cols;
@@ -312,8 +303,7 @@
       clickCount++;
       clearTimeout(clickResetTimeout);
 
-      // Add a subtle hit shake visual response to clicking
-      letters.forEach(letter => {
+letters.forEach(letter => {
         letter.style.transition = 'none';
         letter.style.transform = `translate(${(Math.random() - 0.5) * 30}px, ${(Math.random() - 0.5) * 30}px) scale(1.1)`;
         setTimeout(() => {
@@ -322,7 +312,6 @@
         }, 100);
       });
 
-      // Reset sequence counter if user waits too long between clicks
       clickResetTimeout = setTimeout(() => {
         clickCount = 0;
       }, 1000);
@@ -335,7 +324,6 @@
     function triggerGameOfLifeMorph() {
       golActive = true;
       
-      // Morph and fade out original letters
       letters.forEach((letter, i) => {
         letter.style.transition = 'all 1.5s cubic-bezier(0.16, 1, 0.3, 1)';
         letter.style.opacity = '0';
@@ -346,7 +334,6 @@
         ratTitle.style.display = 'none';
       }, 1500);
 
-      // Set up and start GoL Canvas
       resizeGolCanvas();
       initGolGrid();
       
@@ -366,14 +353,12 @@
 
     function initGolGrid() {
       grid = buildGrid();
-      // Seed with some random life
       for (let c = 0; c < cols; c++) {
         for (let r = 0; r < rows; r++) {
           grid[c][r] = Math.random() > 0.85 ? 1 : 0;
         }
       }
 
-      // Spawn a glider structure in the middle as an initial guarantee
       const midC = Math.floor(cols / 2);
       const midR = Math.floor(rows / 2);
       if (midC > 5 && midR > 5) {
@@ -397,7 +382,6 @@
         for (let r = 0; r < rows; r++) {
           const state = grid[c][r];
           
-          // Count neighbors
           let sum = 0;
           for (let i = -1; i < 2; i++) {
             for (let j = -1; j < 2; j++) {
@@ -408,7 +392,6 @@
             }
           }
 
-          // Rules
           if (state === 1 && (sum < 2 || sum > 3)) {
             next[c][r] = 0;
           } else if (state === 0 && sum === 3) {
@@ -426,14 +409,13 @@
       for (let c = 0; c < cols; c++) {
         for (let r = 0; r < rows; r++) {
           if (grid[c][r] === 1) {
-            ctx.fillStyle = '#ff4444'; // Stylistic digital neon rat red
+            ctx.fillStyle = '#ff4444';
             ctx.fillRect(c * resolution, r * resolution, resolution - 1, resolution - 1);
           }
         }
       }
     }
 
-    // Allow user to draw in more lives on click
     golCanvas.addEventListener('mousedown', (e) => {
       if (!golActive) return;
       const rect = golCanvas.getBoundingClientRect();
@@ -442,7 +424,6 @@
       const c = Math.floor(clickX / resolution);
       const r = Math.floor(clickY / resolution);
       if (c >= 0 && c < cols && r >= 0 && r < rows) {
-        // Toggle cell and surrounding neighbors for drawing spray impact
         grid[c][r] = 1;
         if (c > 0) grid[c-1][r] = 1;
         if (c < cols-1) grid[c+1][r] = 1;
@@ -453,7 +434,6 @@
     });
 
 
-    // --- Original Three.js Visualizer Core ---
     class RatVisualizer {
       constructor(container, type = 'pong') {
         this.container = container;
@@ -627,7 +607,6 @@
       }
     }
 
-    // --- Init Catalog Items ---
     const catalogData = [
       { id: 1, title: 'rat boxing', type: 'boxing', url: 'rat-boxing.html' },
       { id: 2, title: 'rat pong', type: 'pong', url: '#' },
@@ -684,7 +663,7 @@
     }
 
     function expandItem(data, itemEl) {
-      if (data.url === '#') return; // Prevent expanding placeholders
+      if (data.url === '#') return;
       const rect = itemEl.getBoundingClientRect();
       const overlay = document.createElement('div');
       overlay.className = 'zoom-overlay';

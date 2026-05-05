@@ -184,14 +184,12 @@
       import * as THREE from "three";
       import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
   
-      // --- Config ---
       const RAT_MAX_HEALTH = 200;
       const PLAYER_MAX_HEALTH = 100;
       const PUNCH_COOLDOWN = 800;
-      const DODGE_STRENGTH = 6; // Increased for orbital feel
+      const DODGE_STRENGTH = 6;
       const CROUCH_DEPTH = 2;
   
-      // --- State ---
       let ratHealth = RAT_MAX_HEALTH;
       let playerHealth = PLAYER_MAX_HEALTH;
       let gameOver = false;
@@ -209,10 +207,8 @@
       let particles = [];
       const baseBgColor = new THREE.Color(0x010101);
       
-      // Fixed: Declared isPausing state
       let isPausing = false; 
       
-      // --- Scene Setup ---
       const canvas = document.getElementById("canvas");
       const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
       renderer.setSize(window.innerWidth, window.innerHeight);
@@ -223,7 +219,7 @@
   
       const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
       camera.position.set(0, 2, 5);
-      scene.add(camera); // Add camera to scene to parent hands
+      scene.add(camera);
   
       const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
       scene.add(ambientLight);
@@ -232,31 +228,27 @@
       pointLight.position.set(0, 5, 5);
       scene.add(pointLight);
   
-      // --- Assets ---
       let ratModel = null;
       let ratTex = null;
       const objLoader = new OBJLoader();
       const texLoader = new THREE.TextureLoader();
   
-      // --- Player Hands (2D Low-Res Sprites) ---
       const fistTexLeft = texLoader.load("fist.png");
       const fistTexRight = texLoader.load("fist.png");
   
-      // Force low-resolution pixelation (removes anti-aliasing blur)
       [fistTexLeft, fistTexRight].forEach(tex => {
         tex.magFilter = THREE.NearestFilter;
         tex.minFilter = THREE.NearestFilter;
-        tex.generateMipmaps = false; // Prevents softening at distances
+        tex.generateMipmaps = false;
       });
   
-      // Flip the left hand horizontally so it looks like a left fist
       fistTexLeft.repeat.set(-1, 1);
       fistTexLeft.offset.set(1, 0);
   
       const handMatLeft = new THREE.SpriteMaterial({
         map: fistTexLeft,
         transparent: true,
-        depthTest: false, // Ensures hands render on top of scene elements
+        depthTest: false,
       });
   
       const handMatRight = new THREE.SpriteMaterial({
@@ -268,14 +260,12 @@
       const leftHand = new THREE.Sprite(handMatLeft);
       const rightHand = new THREE.Sprite(handMatRight);
   
-      // Scale the 2D flat sprites to look like fists
       leftHand.scale.set(1.5, 1.5, 1);
       rightHand.scale.set(1.5, 1.5, 1);
       
       camera.add(leftHand);
       camera.add(rightHand);
       
-      // Position them relative to camera view space
       leftHand.position.set(-1.8, -0.8, -2.5);
       rightHand.position.set(1.8, -0.8, -2.5);
   
@@ -297,13 +287,12 @@
           });
           ratModel = obj;
           ratModel.scale.set(4, 4, 4);
-          ratModel.rotation.y = Math.PI; // Face the player
+          ratModel.rotation.y = Math.PI;
           ratModel.position.y = 2;
           scene.add(ratModel);
         });
       });
   
-      // --- Effects ---
       function createExplosion(pos) {
         const count = 60;
         const geom = new THREE.BoxGeometry(0.2, 0.2, 0.2);
@@ -322,7 +311,6 @@
         }
       }
   
-      // --- Input ---
       window.addEventListener('mousemove', (e) => {
         if (gameOver) return;
         targetDodgeX = ((e.clientX / window.innerWidth) * 2 - 1) * DODGE_STRENGTH;
@@ -341,11 +329,11 @@
         const now = Date.now();
         if (now - lastPunchTime < PUNCH_COOLDOWN) return;
         
-        if (e.button === 0) { // LMB
+        if (e.button === 0) {
           leftPunching = true;
           lastPunchTime = now;
           checkHit('left');
-        } else if (e.button === 2) { // RMB
+        } else if (e.button === 2) {
           rightPunching = true;
           lastPunchTime = now;
           checkHit('right');
@@ -362,22 +350,19 @@
   
         if (dist < 1.8) {
           let damage = 10;
-          // Counter-hit bonus
           if (ratState === "WINDUP" || ratState === "RECOVER") damage = 18;
   
           ratHealth -= damage;
-          updateUI();
-  
-          // IMPACT WEIGHT: Brief pause
+updateUI();
+
           isPausing = true;
-          setTimeout(() => (isPausing = false), 50);
-  
-          // RAT REACTION: Physics and state change
+setTimeout(() => (isPausing = false), 50);
+
           ratState = "HIT";
-          ratTimer = 0.25; // How long they are stunned
-          ratModel.position.z -= 1.5; // Fly back
-          ratModel.rotation.z += hand === "left" ? 0.4 : -0.4; // Spin from impact
-          ratModel.rotation.x -= 0.3; // Lean back
+          ratTimer = 0.25;
+          ratModel.position.z -= 1.5;
+          ratModel.rotation.z += hand === "left" ? 0.4 : -0.4;
+          ratModel.rotation.x -= 0.3;
   
           flash(0xffffff, 0.4, 4);
   
@@ -391,7 +376,7 @@
         scene.background.set(color);
         screenShake = Math.max(screenShake, shake);
         setTimeout(() => {
-          scene.background.copy(baseBgColor); // Always restore to base color
+          scene.background.copy(baseBgColor);
         }, 70);
       }
   
@@ -409,7 +394,7 @@
         } else {
           document.getElementById('ko-text').innerText = 'YOU K.O.';
           document.getElementById('ko-text').style.color = '#eee';
-          camera.rotation.z = 0.5; // Tilt camera on death
+          camera.rotation.z = 0.5;
           flash(0xff0000, 0.5, 10);
         }
       }
@@ -420,8 +405,7 @@
         document.getElementById('player-health').style.width = Math.max(0, playerHealth) + '%';
       }
   
-      // --- AI ---
-      let ratState = 'IDLE'; // IDLE, WINDUP, ATTACK, RECOVER, KO
+      let ratState = 'IDLE';
       let ratTimer = 0;
       let currentAttack = null;
       let attackProcessed = false;
@@ -463,9 +447,8 @@
         } else if (ratState === "RECOVER" && ratTimer <= 0) {
           ratState = "IDLE";
           ratTimer = 0.4 + Math.random() * 0.6;
-        }
-      
-        // Visual Transitions
+}
+
         const time = Date.now() * 0.001;
         if (ratState === "IDLE") {
           const shuffleX = Math.sin(time * 4) * 2;
@@ -492,7 +475,6 @@
         }
       }
   
-      // --- Loop ---
       const clock = new THREE.Clock();
       function animate() {
         requestAnimationFrame(animate);
@@ -500,22 +482,20 @@
       
         const dt = clock.getDelta();
       
-        // Particle Physics
         for (let i = particles.length - 1; i >= 0; i--) {
           const p = particles[i];
           p.position.addScaledVector(p.velocity, dt);
-          p.velocity.y -= 35 * dt; // Gravity
+          p.velocity.y -= 35 * dt;
           p.life -= dt;
           p.scale.setScalar(p.life);
           if (p.life <= 0) {
             scene.remove(p);
             particles.splice(i, 1);
           }
-        }
-      
-        // Camera & Orbital Movement
+}
+       
         dodgeX += (targetDodgeX - dodgeX) * 0.15;
-        crouchY += (targetCrouchY - crouchY) * 0.15;
+crouchY += (targetCrouchY - crouchY) * 0.15;
       
         const orbitAngle = dodgeX * 0.3;
         camera.position.x = Math.sin(orbitAngle) * 5;
@@ -530,7 +510,6 @@
       
         camera.lookAt(0, 2, 0);
       
-        // Punching Animation (Moves closer/further along relative Z space)
         const punchSpeed = 18;
         if (leftPunching) {
           leftHand.position.z -= punchSpeed * dt;

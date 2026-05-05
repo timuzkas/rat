@@ -50,7 +50,6 @@
     import * as THREE from "three";
     import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
 
-    // Maze Data
     const map = [
       [1,1,1,1,1,1,1,1,1,1],
       [1,0,0,0,0,0,0,0,0,1],
@@ -65,12 +64,10 @@
     ];
     const MAP_SIZE = 10;
 
-    // Scene Setup
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x000000);
     scene.fog = new THREE.FogExp2(0x000000, 0.15);
 
-    // Low-res rendering setup
     const RENDER_W = Math.floor(window.innerWidth / 4);
     const RENDER_H = Math.floor(window.innerHeight / 4);
     
@@ -81,7 +78,6 @@
     renderer.domElement.style.width = '100vw';
     renderer.domElement.style.height = '100vh';
 
-    // Lighting
     const flashlight = new THREE.SpotLight(0xffffff, 10, 15, Math.PI / 6, 0.5, 1);
     camera.add(flashlight);
     flashlight.position.set(0, 0, 0);
@@ -92,7 +88,6 @@
     const ambient = new THREE.AmbientLight(0x050505);
     scene.add(ambient);
 
-    // Build Maze
     const wallGeom = new THREE.BoxGeometry(1, 2, 1);
     const wallMat = new THREE.MeshStandardMaterial({ 
       color: 0x111111, 
@@ -111,7 +106,6 @@
       }
     }
 
-    // Floor
     const floorGeom = new THREE.PlaneGeometry(20, 20);
     const floorMat = new THREE.MeshStandardMaterial({ color: 0x050505 });
     const floor = new THREE.Mesh(floorGeom, floorMat);
@@ -119,7 +113,6 @@
     floor.position.set(5, 0, 5);
     scene.add(floor);
 
-    // Stalker State
     const STATES = { HIDDEN: 0, STALK: 1, CHASE: 2, DASH: 3 };
     let stalkerState = STATES.HIDDEN;
     let stalker;
@@ -127,12 +120,10 @@
     let glitchTimer = 0;
     let stalkerPatience = 1;
 
-    // Player State
     camera.position.set(1.5, 0.5, 1.5);
-    let pa = 0; // Look angle
+    let pa = 0;
     let pitch = 0;
 
-    // Controls
     const keys = {};
     window.onkeydown = (e) => keys[e.code] = true;
     window.onkeyup = (e) => keys[e.code] = false;
@@ -163,7 +154,6 @@
             emissive: 0xff0000, 
             emissiveIntensity: 0
           });
-          // Normalize scale
           c.geometry.computeBoundingBox();
           c.geometry.center();
           const box = new THREE.Box3().setFromObject(c);
@@ -209,7 +199,6 @@
         if (canMove(camera.position.x, nz)) camera.position.z = nz;
       }
 
-      // Advanced Stalker Logic
       if (stalker) {
         stalkerTimer += dt;
 
@@ -217,10 +206,9 @@
           if (stalkerTimer > 2) {
             const roll = Math.random();
             if (roll > 0.6) {
-              // Decide behavior
               const modeRoll = Math.random();
               if (modeRoll < 0.3) {
-                stalkerState = STATES.DASH; // Fast peek in front
+                stalkerState = STATES.DASH;
                 const dist = 3 + Math.random() * 2;
                 const angle = pa + (Math.random() - 0.5) * 0.5;
                 const sx = camera.position.x - Math.sin(angle) * dist;
@@ -231,7 +219,7 @@
                   stalkerTimer = 0;
                 }
               } else if (modeRoll < 0.7) {
-                stalkerState = STATES.STALK; // Hiding in corner/side
+                stalkerState = STATES.STALK;
                 const dist = 5 + Math.random() * 3;
                 const angle = pa + Math.PI/2 + (Math.random() - 0.5) * 2;
                 const sx = camera.position.x - Math.sin(angle) * dist;
@@ -243,16 +231,16 @@
                   stalkerTimer = 0;
                 }
               } else {
-                stalkerState = STATES.CHASE; // Aggressive
-                const dist = 8 + Math.random() * 4; // Further away
-                const angle = pa + Math.PI + (Math.random() - 0.5) * 3; // Wider arc behind/side
+                stalkerState = STATES.CHASE;
+                const dist = 8 + Math.random() * 4;
+                const angle = pa + Math.PI + (Math.random() - 0.5) * 3;
                 const sx = camera.position.x - Math.sin(angle) * dist;
                 const sz = camera.position.z - Math.cos(angle) * dist;
                 if (canMove(sx, sz)) {
                   stalker.position.set(sx, 0.3, sz);
                   stalker.visible = true;
                   stalkerTimer = 0;
-                  stalkerPatience = 1.5 + Math.random(); // Reset patience
+                  stalkerPatience = 1.5 + Math.random();
                 }
               }
             }
@@ -266,16 +254,15 @@
           stalker.rotation.y = Math.atan2(toPlayer.x, toPlayer.z);
 
           const dot = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).dot(new THREE.Vector3().subVectors(stalker.position, camera.position).normalize());
-          const isBeingLookedAt = dot > 0.92; // Slightly more lenient detection
+          const isBeingLookedAt = dot > 0.92;
 
           if (stalkerState === STATES.DASH) {
-            if (stalkerTimer > 0.8 || isBeingLookedAt) { // Slightly longer dash
+            if (stalkerTimer > 0.8 || isBeingLookedAt) {
               stalkerState = STATES.HIDDEN;
               stalker.visible = false;
               stalkerTimer = -1;
             }
           } else if (stalkerState === STATES.STALK) {
-            // Glow red eyes from distance
             stalker.traverse(c => { if(c.isMesh) c.material.emissiveIntensity = 1.2 + Math.sin(Date.now() * 0.01) * 0.6; });
             if (isBeingLookedAt) {
               stalkerPatience -= dt;
@@ -286,15 +273,15 @@
                 stalkerTimer = 0;
               }
             }
-            if (dist < 3.5) stalkerState = STATES.CHASE; // Switch to chase if player gets too close
+            if (dist < 3.5) stalkerState = STATES.CHASE;
             if (stalkerTimer > 10) { stalkerState = STATES.HIDDEN; stalker.visible = false; }
           } else if (stalkerState === STATES.CHASE) {
-            stalker.position.add(toPlayer.multiplyScalar(1.0 * dt)); // Slower chase speed
+            stalker.position.add(toPlayer.multiplyScalar(1.0 * dt));
             stalker.traverse(c => { if(c.isMesh) c.material.emissiveIntensity = 2.0; });
             
             if (isBeingLookedAt) {
               stalkerPatience -= dt;
-              if (stalkerPatience < -1.5) { // Faster "give up"
+              if (stalkerPatience < -1.5) {
                 stalkerState = STATES.HIDDEN;
                 stalker.visible = false;
                 stalkerTimer = -3;
