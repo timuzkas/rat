@@ -269,12 +269,12 @@
             if (dist < 3.5) stalkerState = STATES.CHASE;
             if (stalkerTimer > 10) { stalkerState = STATES.HIDDEN; stalker.visible = false; }
           } else if (stalkerState === STATES.CHASE) {
-            stalker.position.add(toPlayer.multiplyScalar(1.0 * dt));
+            stalker.position.add(toPlayer.multiplyScalar(2.0 * dt));
             stalker.traverse(c => { if(c.isMesh) c.material.emissiveIntensity = 2.0; });
             
             if (isBeingLookedAt) {
               stalkerPatience -= dt * 0.75;
-              if (stalkerPatience < -2.0) {
+              if (stalkerPatience < -2.5) {
                 stalkerState = STATES.HIDDEN;
                 stalker.visible = false;
                 stalkerTimer = -3;
