@@ -20,6 +20,7 @@ const MIME_TYPES = {
   '.eot': 'application/vnd.ms-fontobject',
   '.otf': 'application/font-otf',
   '.wasm': 'application/wasm',
+  '.ico': 'image/x-icon',
   '.obj': 'text/plain'
 };
 
@@ -27,6 +28,8 @@ const server = http.createServer((req, res) => {
   let filePath = '.' + req.url;
   if (filePath === './') {
     filePath = './index.html';
+  } else if (filePath === './favicon.ico') {
+    filePath = './rat.ico';
   }
 
   const extname = String(path.extname(filePath)).toLowerCase();
