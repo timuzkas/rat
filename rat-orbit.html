@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rat Orbit</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Averia+Serif+Libre:ital,wght@0,300;0,400;0,700;1,300;1,400;1,700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      overflow: hidden;
+      background: #000;
+      font-family: "Averia Serif Libre", serif;
+      color: #eee;
+    }
+    #canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      cursor: grab;
+    }
+    #canvas:active {
+      cursor: grabbing;
+    }
+    
+    #ui-container {
+      position: fixed;
+      bottom: 40px;
+      right: 40px;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 20px;
+    }
+
+    #tweak-ui {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 15px;
+      transition: opacity 0.5s ease, transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+      transform-origin: bottom right;
+      pointer-events: auto;
+    }
+
+    #tweak-ui.collapsed {
+      transform: scale(0.8) translateY(20px);
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #toggle-ui {
+      width: 60px;
+      height: 60px;
+      cursor: pointer;
+      image-rendering: pixelated;
+      filter: grayscale(1) brightness(0.6);
+      transition: filter 0.3s ease, transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    #toggle-ui:hover {
+      filter: grayscale(0) brightness(1);
+      transform: scale(1.1) rotate(5deg);
+    }
+
+    /* Strange Text Slider */
+    .strange-slider {
+      position: relative;
+      cursor: ew-resize;
+      user-select: none;
+      height: 30px;
+      display: inline-block;
+      white-space: nowrap;
+    }
+
+    .slider-text {
+      font-size: 16px;
+      font-weight: 400;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      line-height: 30px;
+    }
+
+    .gray-text {
+      color: #1a1a1a;
+    }
+
+    .white-text-wrap {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 0%; /* Dynamic */
+      height: 100%;
+      overflow: hidden;
+      border-right: 1px solid #fff;
+      pointer-events: none;
+    }
+
+    .white-text {
+      color: #fff;
+      display: block;
+      width: 400px; /* Large fixed width to prevent wrapping */
+    }
+
+    #info {
+      position: fixed;
+      bottom: 40px;
+      left: 40px;
+      color: #0a0a0a;
+      font-size: 10px;
+      letter-spacing: 0.4em;
+      text-transform: uppercase;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  
+  <div id="info">Rat Orbit // Atomic Simulation</div>
+
+  <div id="ui-container">
+    <div id="tweak-ui">
+      <!-- Custom Sliders -->
+      <div class="strange-slider" id="slider-speed" data-min="0" data-max="3" data-val="1">
+        <div class="slider-text gray-text">Simulation Speed</div>
+        <div class="white-text-wrap">
+          <div class="slider-text white-text">Simulation Speed</div>
+        </div>
+      </div>
+
+      <div class="strange-slider" id="slider-count" data-min="1" data-max="40" data-val="12">
+        <div class="slider-text gray-text">Rat Density</div>
+        <div class="white-text-wrap">
+          <div class="slider-text white-text">Rat Density</div>
+        </div>
+      </div>
+
+      <div class="strange-slider" id="slider-scale" data-min="0.1" data-max="3" data-val="1">
+        <div class="slider-text gray-text">Rat Scale</div>
+        <div class="white-text-wrap">
+          <div class="slider-text white-text">Rat Scale</div>
+        </div>
+      </div>
+
+      <div class="strange-slider" id="slider-spread" data-min="0.5" data-max="8" data-val="2.5">
+        <div class="slider-text gray-text">Orbit Spread</div>
+        <div class="white-text-wrap">
+          <div class="slider-text white-text">Orbit Spread</div>
+        </div>
+      </div>
+    </div>
+    <img src="rat.png" id="toggle-ui" alt="rat">
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
+    import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+    const canvas = document.getElementById("canvas");
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x010101);
+
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 2000);
+    camera.position.set(12, 10, 12);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.maxDistance = 500;
+
+    const ambientLight = new THREE.AmbientLight(0xffffff, 1.5);
+    scene.add(ambientLight);
+
+    const orbitsGroup = new THREE.Group();
+    scene.add(orbitsGroup);
+
+    let params = {
+      speed: 1.0,
+      count: 12,
+      scale: 0.8,
+      spread: 4.0,
+      baseRadius: 8.0
+    };
+
+    let ratModel = null;
+    let ratTex = null;
+
+    new THREE.TextureLoader().load('rattex.png', (tex) => {
+      tex.magFilter = THREE.NearestFilter;
+      tex.minFilter = THREE.NearestFilter;
+      ratTex = tex;
+      new OBJLoader().load('model_0.obj', (obj) => {
+        obj.traverse(child => {
+          if (child.isMesh) {
+            child.material = new THREE.MeshStandardMaterial({ map: ratTex, metalness: 0.1, roughness: 0.8 });
+            // Normalize geometry for consistent scaling
+            child.geometry.computeBoundingBox();
+            child.geometry.center();
+            const box = new THREE.Box3().setFromObject(child);
+            const size = box.getSize(new THREE.Vector3());
+            const maxDim = Math.max(size.x, size.y, size.z) || 1;
+            child.scale.set(1/maxDim, 1/maxDim, 1/maxDim);
+          }
+        });
+        ratModel = obj;
+        refreshSimulation();
+      });
+    });
+
+    function refreshSimulation() {
+      while(orbitsGroup.children.length > 0) orbitsGroup.remove(orbitsGroup.children[0]);
+      if (!ratModel) return;
+
+      for(let i = 0; i < params.count; i++) {
+        const orbitPivot = new THREE.Group();
+        orbitPivot.rotation.x = Math.random() * Math.PI;
+        orbitPivot.rotation.y = Math.random() * Math.PI;
+        
+        // Much wider spacing
+        const radius = params.baseRadius + (i * params.spread);
+        
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(radius, 0.01, 16, 120), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.03 }));
+        orbitPivot.add(ring);
+
+        const rat = ratModel.clone();
+        const s = 1.2 * params.scale; // Adjusted for normalized model
+        rat.scale.set(s, s, s);
+        rat.position.x = radius;
+        rat.userData.offset = Math.random() * Math.PI * 2;
+        rat.userData.individualSpeed = 0.2 + Math.random() * 1.5;
+        rat.userData.radius = radius;
+        
+        orbitPivot.add(rat);
+        orbitsGroup.add(orbitPivot);
+      }
+    }
+
+    // --- Strange UI Slider Logic ---
+    const sliders = document.querySelectorAll('.strange-slider');
+    const sliderStates = [];
+
+    sliders.forEach(slider => {
+      const min = parseFloat(slider.dataset.min);
+      const max = parseFloat(slider.dataset.max);
+      let targetVal = parseFloat(slider.dataset.val);
+      let currentVal = targetVal;
+      let dragging = false;
+
+      const fill = slider.querySelector('.white-text-wrap');
+
+      const updateUI = () => {
+        const percent = (currentVal - min) / (max - min);
+        fill.style.width = (percent * 100) + '%';
+      };
+
+      const handleMove = (clientX) => {
+        const rect = slider.getBoundingClientRect();
+        const percent = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+        targetVal = min + percent * (max - min);
+      };
+
+      slider.addEventListener('mousedown', (e) => { dragging = true; handleMove(e.clientX); });
+      window.addEventListener('mousemove', (e) => { if (dragging) handleMove(e.clientX); });
+      window.addEventListener('mouseup', () => dragging = false);
+
+      sliderStates.push({
+        slider,
+        update: (dt) => {
+          currentVal += (targetVal - currentVal) * (1 - Math.exp(-15 * dt));
+          updateUI();
+          return currentVal;
+        }
+      });
+    });
+
+    const tweakUI = document.getElementById('tweak-ui');
+    document.getElementById('toggle-ui').onclick = () => tweakUI.classList.toggle('collapsed');
+
+    const clock = new THREE.Clock();
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = clock.getDelta();
+      const time = clock.getElapsedTime();
+
+      // Update Slider Params
+      params.speed = sliderStates[0].update(dt);
+      const newCount = Math.round(sliderStates[1].update(dt));
+      if (newCount !== params.count) { params.count = newCount; refreshSimulation(); }
+      const newScale = sliderStates[2].update(dt);
+      if (Math.abs(newScale - params.scale) > 0.01) { params.scale = newScale; refreshSimulation(); }
+      const newSpread = sliderStates[3].update(dt);
+      if (Math.abs(newSpread - params.spread) > 0.05) { params.spread = newSpread; refreshSimulation(); }
+
+      orbitsGroup.children.forEach(orbit => {
+        const rat = orbit.children[1];
+        if (rat) {
+          const angle = time * rat.userData.individualSpeed * params.speed + rat.userData.offset;
+          rat.position.x = Math.cos(angle) * rat.userData.radius;
+          rat.position.z = Math.sin(angle) * rat.userData.radius;
+          rat.rotation.y = -angle + Math.PI/2;
+          rat.rotation.x = time * 0.15;
+        }
+      });
+
+      orbitsGroup.rotation.y += dt * 0.04 * params.speed;
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    animate();
+  </script>
+</body>
+</html>

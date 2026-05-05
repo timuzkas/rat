@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rat Pong</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      overflow: hidden;
+      background: #000;
+      cursor: crosshair;
+      font-family: "SF Mono", Monaco, monospace;
+    }
+    #canvas {
+      display: block;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      width: 100vw;
+      height: 100vh;
+    }
+    #ui {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #333;
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      pointer-events: none;
+      user-select: none;
+    }
+    #ui .key {
+      color: #888;
+      background: #111;
+      padding: 3px 7px;
+      border-radius: 2px;
+      margin-right: 10px;
+    }
+    #score {
+      position: fixed;
+      top: 50px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #333;
+      font-size: 24px;
+      letter-spacing: 0.3em;
+      pointer-events: none;
+    }
+    .score-val {
+      display: inline-block;
+      min-width: 1.5em;
+      text-align: center;
+      transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .score-val.pop {
+      transform: scale(1.4);
+      color: #eee;
+    }
+
+    #insanity-wrap {
+      position: fixed;
+      bottom: 40px;
+      right: 40px;
+      width: 40px;
+      height: 180px;
+      display: flex;
+      flex-direction: column-reverse;
+      align-items: center;
+      pointer-events: auto;
+      z-index: 100;
+    }
+    #insanity-label {
+      position: absolute;
+      right: 50px;
+      bottom: 12px;
+      white-space: nowrap;
+      color: #555;
+      font-size: 9px;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      opacity: 0;
+      transition: opacity 0.4s ease;
+      pointer-events: none;
+    }
+    #insanity-track {
+      width: 2px;
+      height: 140px;
+      background: #111;
+      position: relative;
+      opacity: 0;
+      transition: opacity 0.4s ease, background 0.4s ease;
+    }
+    #insanity-wrap:hover #insanity-label,
+    #insanity-wrap:hover #insanity-track {
+      opacity: 1;
+    }
+    #insanity-head {
+      position: absolute;
+      bottom: 0%;
+      left: 50%;
+      width: 42px;
+      height: 42px;
+      transform: translate(-50%, 50%);
+      cursor: grab;
+      background: url('rat.png') no-repeat center/contain;
+      image-rendering: pixelated;
+      filter: grayscale(0.8) contrast(1.2);
+      transition: filter 0.3s ease, transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      z-index: 101;
+      pointer-events: auto;
+    }
+    #insanity-head:active {
+      cursor: grabbing;
+      transform: translate(-50%, 50%) scale(1.2);
+    }
+    #insanity-wrap:hover #insanity-head {
+      filter: grayscale(0) contrast(1.1);
+    }
+
+    #glitch-overlay {
+          position: fixed;
+          inset: 0;
+          pointer-events: none;
+          z-index: 50;
+        }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <div id="ui">
+    <span class="key">A</span> autoplay
+  </div>
+  <div id="score">
+    <span id="p-score" class="score-val">0</span>
+    <span>—</span>
+    <span id="c-score" class="score-val">0</span>
+  </div>
+
+  <div id="insanity-wrap">
+    <div id="insanity-head"></div>
+    <div id="insanity-track"></div>
+    <div id="insanity-label">Heroin dose</div>
+  </div>
+
+  <div id="glitch-overlay"></div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
+
+    // --- Config ---
+    let FIELD_W = 26;
+    let FIELD_H = 16;
+    const PADDLE_W = 0.25;
+    const PADDLE_H = 2.4;
+    const BALL_R = 0.4;
+    const PADDLE_MARGIN = 1.2;
+    const RES_SCALE = 0.3;
+
+    // --- State ---
+    let autoplay = false;
+    let playerScore = 0;
+    let cpuScore = 0;
+    let gameActive = true;
+    let resetTimer = null;
+
+    let mouseY = 0;
+    let mouseActive = false;
+
+    // Insanity
+    let insanity = 0;
+    let targetInsanity = 0;
+    let draggingInsanity = false;
+
+    let isHoldingRat = false;
+    let ratScale = 1;
+    let lastMousePos = new THREE.Vector2();
+
+    // Paddles
+    let playerY = 0;
+    let cpuY = 0;
+
+    // Ball
+    let ballPos = new THREE.Vector3(0, 0, 0);
+    let ballVel = new THREE.Vector3(6, 3, 0);
+    let ballSpin = new THREE.Vector3(0, 0, 0);
+    let ballSpinVel = new THREE.Vector3(0, 0, 8);
+
+    // Rat
+    let ratGroup = new THREE.Group();
+    let ratMesh = null;
+    let ratGhosts = []; 
+
+    // --- Scene ---
+    const overlay = document.getElementById("glitch-overlay");
+    const canvas = document.getElementById("canvas");
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x000000);
+
+    let camera;
+    let border;
+    let playerPaddle, cpuPaddle;
+
+    function createPaddle() {
+      const group = new THREE.Group();
+      const shardCount = 8;
+      for (let i = 0; i < shardCount; i++) {
+        const shard = new THREE.Mesh(
+          new THREE.BoxGeometry(PADDLE_W, PADDLE_H / shardCount - 0.05, 0.2),
+          new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true })
+        );
+        shard.position.y = (i - (shardCount-1)/2) * (PADDLE_H / shardCount);
+        shard.userData.origY = shard.position.y;
+        group.add(shard);
+      }
+      return group;
+    }
+
+    function updateLayout() {
+      const aspect = window.innerWidth / window.innerHeight;
+      FIELD_H = 16;
+      FIELD_W = FIELD_H * aspect * 0.95; 
+      const viewH = FIELD_H + 2;
+      const viewW = viewH * aspect;
+      
+      if (!camera) {
+        camera = new THREE.OrthographicCamera(-viewW/2, viewW/2, viewH/2, -viewH/2, 0.1, 100);
+        camera.position.z = 10;
+      } else {
+        camera.left = -viewW / 2;
+        camera.right = viewW / 2;
+        camera.top = viewH / 2;
+        camera.bottom = -viewH / 2;
+        camera.updateProjectionMatrix();
+      }
+      renderer.setSize(window.innerWidth * RES_SCALE, window.innerHeight * RES_SCALE, false);
+      
+      if (!border) {
+        const borderMat = new THREE.LineBasicMaterial({ color: 0x0a0a0a });
+        border = new THREE.LineSegments(new THREE.BufferGeometry(), borderMat);
+        scene.add(border);
+      }
+      border.geometry.dispose();
+      border.geometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(FIELD_W, FIELD_H, 0.1));
+
+      if (!playerPaddle) {
+        playerPaddle = createPaddle();
+        scene.add(playerPaddle);
+      }
+      playerPaddle.position.x = FIELD_W / 2 - PADDLE_MARGIN;
+
+      if (!cpuPaddle) {
+        cpuPaddle = createPaddle();
+        scene.add(cpuPaddle);
+      }
+      cpuPaddle.position.x = -FIELD_W / 2 + PADDLE_MARGIN;
+    }
+
+    scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+    scene.add(ratGroup);
+
+    function loadRatModel(index) {
+      const path = `model_${index}.obj`;
+      new OBJLoader().load(path, setupRat, undefined, () => {
+        if (index < 1) loadRatModel(index + 1);
+        else createProceduralRat();
+      });
+    }
+
+    function setupRat(obj) {
+      obj.traverse((child) => {
+        if (child.isMesh) {
+          child.geometry.computeBoundingBox();
+          child.geometry.center();
+          const box = new THREE.Box3().setFromObject(child);
+          const size = box.getSize(new THREE.Vector3());
+          const maxDim = Math.max(size.x, size.y, size.z) || 1;
+          const scale = 1.2 / maxDim; 
+          child.geometry.scale(scale, scale, scale);
+          child.position.set(0, 0, 0);
+          child.material = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true });
+          
+          new THREE.TextureLoader().load('rattex.png', (tex) => {
+            tex.magFilter = THREE.NearestFilter;
+            tex.minFilter = THREE.NearestFilter;
+            child.material.map = tex;
+            child.material.needsUpdate = true;
+          });
+        }
+      });
+      finalizeRat(obj);
+    }
+
+    function createProceduralRat() {
+      const group = new THREE.Group();
+      const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true });
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.4, 0.4), mat);
+      group.add(body);
+      finalizeRat(group);
+    }
+
+    function finalizeRat(obj) {
+      if (ratMesh) ratGroup.remove(ratMesh);
+      ratGhosts.forEach(g => ratGroup.remove(g));
+      ratGhosts = [];
+
+      ratMesh = obj;
+      ratGroup.add(ratMesh);
+
+      const colors = [0xff4444, 0x44ff44, 0x4444ff];
+      colors.forEach(c => {
+        const ghost = ratMesh.clone();
+        ghost.traverse(child => {
+          if (child.isMesh) {
+            child.material = child.material.clone();
+            child.material.color.set(c);
+            child.material.opacity = 0.5;
+            child.material.blending = THREE.AdditiveBlending;
+          }
+        });
+        ratGhosts.push(ghost);
+        ratGroup.add(ghost);
+      });
+    }
+
+    loadRatModel(0);
+    updateLayout();
+
+    const keys = {};
+    window.addEventListener("keydown", (e) => {
+      keys[e.key.toLowerCase()] = true;
+      if (e.key.toLowerCase() === "a") autoplay = !autoplay;
+      if (e.key.toLowerCase() === "r") resetGame();
+    });
+    window.addEventListener("keyup", (e) => keys[e.key.toLowerCase()] = false);
+    window.addEventListener("mousemove", (e) => {
+      mouseActive = true;
+      const rect = canvas.getBoundingClientRect();
+      const newX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      const newY = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+           
+      const currentMouseWorldY = (1 - (e.clientY - rect.top) / rect.height) * FIELD_H - FIELD_H / 2;
+      const currentMouseWorldX = ((e.clientX - rect.left) / rect.width) * FIELD_W - FIELD_W / 2;
+           
+      if (isHoldingRat) {
+         const dx = currentMouseWorldX - ballPos.x;
+         const dy = currentMouseWorldY - ballPos.y;
+         ballVel.set(dx * 20, dy * 20, 0);
+         ballPos.set(currentMouseWorldX, currentMouseWorldY, 0);
+      }
+     
+      mouseY = currentMouseWorldY;
+      lastMousePos.set(currentMouseWorldX, currentMouseWorldY);
+    });
+
+    window.addEventListener("mousedown", () => { if (!draggingInsanity) isHoldingRat = true; });
+    window.addEventListener("mouseup", () => { isHoldingRat = false; draggingInsanity = false; });
+    window.addEventListener("wheel", (e) => { ratScale = THREE.MathUtils.clamp(ratScale - e.deltaY * 0.001, 0.2, 5); });
+
+    const insWrap = document.getElementById('insanity-wrap');
+    const insTrack = document.getElementById('insanity-track');
+    const insHead = document.getElementById('insanity-head');
+
+    insHead.addEventListener('mousedown', (e) => {
+      draggingInsanity = true;
+      e.preventDefault();
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (draggingInsanity) {
+        const rect = insTrack.getBoundingClientRect();
+        let val = (rect.bottom - e.clientY) / rect.height;
+        targetInsanity = THREE.MathUtils.clamp(val, 0, 1);
+        insHead.style.bottom = (targetInsanity * 100) + '%';
+      }
+    });
+    window.addEventListener('mouseup', () => draggingInsanity = false);
+
+    function resetGame() {
+      ballPos.set(0, 0, 0);
+      const dir = Math.random() > 0.5 ? 1 : -1;
+      const angle = (Math.random() - 0.5) * 0.8;
+      ballVel.set(Math.cos(angle) * 7 * dir, Math.sin(angle) * 5, 0);
+      ballSpin.set(0, 0, 0);
+      ballSpinVel.set(Math.random() * 10 - 5, Math.random() * 10 - 5, 12 + Math.random() * 8);
+      gameActive = true;
+      if (resetTimer) clearTimeout(resetTimer);
+    }
+
+    let lastWinner = null;
+
+    function scorePoint(winner) {
+      gameActive = false;
+      const el = document.getElementById(winner === "player" ? "p-score" : "c-score");
+      ilastWinner = winner; if (winner === "player") playerScore++; else cpuScore++;
+      el.textContent = winner === "player" ? playerScore : cpuScore;
+      el.classList.add("pop");
+      setTimeout(() => el.classList.remove("pop"), 400);
+      resetTimer = setTimeout(resetGame, 1000);
+    }
+
+    function expSmooth(current, target, factor, dt) {
+      return current + (target - current) * (1 - Math.exp(-factor * dt));
+    }
+
+    const clock = new THREE.Clock();
+    let time = 0;
+
+    function update(dt) {
+          time += dt;
+          const t = Math.min(dt, 0.05);
+          insanity = expSmooth(insanity, targetInsanity, 4, t);
+          const maxY = FIELD_H / 2 - PADDLE_H / 2;
+    
+          let playerTarget = playerY;
+          if (autoplay) playerTarget = gameActive ? ballPos.y : 0;
+          else {
+            if (mouseActive) playerTarget = mouseY;
+            if (keys["w"] || keys["arrowup"]) playerTarget += 12 * t;
+            if (keys["s"] || keys["arrowdown"]) playerTarget -= 12 * t;
+          }
+          playerY = expSmooth(
+            playerY,
+            THREE.MathUtils.clamp(playerTarget, -maxY, maxY),
+            15,
+            t
+          );
+    
+          let cpuTarget = cpuY;
+          if (gameActive) cpuTarget = ballPos.y;
+          else cpuTarget = 0;
+          cpuY = expSmooth(
+            cpuY,
+            THREE.MathUtils.clamp(cpuTarget, -maxY, maxY),
+            8,
+            t
+          );
+    
+          playerPaddle.position.y = playerY;
+          cpuPaddle.position.y = cpuY;
+    
+          // --- The Trip ---
+          const insanityThreshold = 0.2;
+          const activeInsanity =
+            Math.max(0, insanity - insanityThreshold) / (1 - insanityThreshold);
+    
+          [playerPaddle, cpuPaddle].forEach((p, idx) => {
+            p.children.forEach((s, i) => {
+              if (insanity > insanityThreshold) {
+                const offset = i * 0.5 + time * (1 + activeInsanity * 15);
+                const radius = activeInsanity * 2.5;
+                s.position.x = Math.sin(offset) * radius;
+                s.position.z = Math.cos(offset) * radius;
+                s.rotation.y = offset;
+                s.rotation.x = time * activeInsanity * 5;
+                s.material.opacity = 1 - activeInsanity * 0.5;
+                s.material.color.setHSL(
+                  (time * 0.1 + i * 0.1) % 1,
+                  0.8 * activeInsanity,
+                  0.5
+                );
+              } else {
+                s.position.set(0, s.userData.origY, 0);
+                s.rotation.set(0, 0, 0);
+                s.material.opacity = 1;
+                s.material.color.set(0xffffff);
+              }
+            });
+          });
+    
+          // Glitch visual
+          if (insanity > 0.5 && Math.random() > 0.95 - insanity * 0.1) {
+            overlay.style.background = `rgba(255,255,255,${insanity * 0.2})`;
+            setTimeout(() => (overlay.style.background = "transparent"), 20);
+            renderer.domElement.style.filter = `hue-rotate(${
+              Math.random() * 360
+            }deg) invert(${insanity * 50}%)`;
+          } else {
+            renderer.domElement.style.filter = "none";
+          }
+    
+          if (ratMesh) {
+            const split = insanity * 1.5;
+            ratGhosts.forEach((g, i) => {
+              const angle = (i / ratGhosts.length) * Math.PI * 2 + time * 8;
+              g.position.set(Math.cos(angle) * split, Math.sin(angle) * split, 0);
+              g.visible = insanity > 0.05;
+              g.rotation.z = time * insanity * 10;
+            });
+            ratGroup.scale.setScalar(
+              ratScale * (1 + Math.sin(time * 10 * insanity) * 0.2 * insanity)
+            );
+            ratGroup.position.x += (Math.random() - 0.5) * insanity * 0.6;
+            ratGroup.position.y += (Math.random() - 0.5) * insanity * 0.6;
+          }
+    
+          if (border) {
+            scene.rotation.z = Math.sin(time * 0.2) * insanity * 1.2;
+            const zoom = 1 + Math.sin(time * 2) * insanity * 0.2;
+            scene.scale.set(zoom, zoom, 1);
+            const bgVal = insanity * 0.08;
+            scene.background.setHSL((time * 0.05) % 1, 0.2 * insanity, bgVal);
+          }
+    
+          const effectiveRadius = BALL_R * ratScale;
+    
+          if (isHoldingRat) {
+            ballPos.set(lastMousePos.x, lastMousePos.y, 0);
+          } else if (gameActive) {
+            ballPos.x += ballVel.x * t;
+            ballPos.y += ballVel.y * t;
+    
+            const halfH = FIELD_H / 2 - effectiveRadius;
+            if (ballPos.y > halfH) {
+              ballPos.y = halfH;
+              ballVel.y = -Math.abs(ballVel.y);
+            } else if (ballPos.y < -halfH) {
+              ballPos.y = -halfH;
+              ballVel.y = Math.abs(ballVel.y);
+            }
+    
+            const pX = FIELD_W / 2 - PADDLE_MARGIN;
+            const cX = -FIELD_W / 2 + PADDLE_MARGIN;
+    
+            if (ballVel.x > 0 && ballPos.x > pX - PADDLE_W / 2 - effectiveRadius) {
+              const hitY = ballPos.y - playerY;
+              if (Math.abs(hitY) < PADDLE_H / 2 + effectiveRadius) {
+                ballPos.x = pX - PADDLE_W / 2 - effectiveRadius;
+                ballVel.x *= -1.05;
+                ballVel.y += hitY * 3;
+                ballSpinVel.z += hitY * 10;
+              }
+            }
+            if (ballVel.x < 0 && ballPos.x < cX + PADDLE_W / 2 + effectiveRadius) {
+              const hitY = ballPos.y - cpuY;
+              if (Math.abs(hitY) < PADDLE_H / 2 + effectiveRadius) {
+                ballPos.x = cX + PADDLE_W / 2 + effectiveRadius;
+                ballVel.x *= -1.05;
+                ballVel.y += hitY * 3;
+                ballSpinVel.z += hitY * 10;
+              }
+            }
+    
+            if (ballPos.x > FIELD_W / 2 + 1) scorePoint("cpu");
+            else if (ballPos.x < -FIELD_W / 2 - 1) scorePoint("player");
+          }
+    
+          ratGroup.position.set(ballPos.x, ballPos.y, 1);
+          if (gameActive || isHoldingRat) {
+            ballSpin.addScaledVector(ballSpinVel, t);
+            ratGroup.rotation.set(ballSpin.x, ballSpin.y, ballSpin.z);
+            ballSpinVel.multiplyScalar(1 - 0.5 * t);
+          } else {
+            ratGroup.rotation.y += t;
+          }
+        }
+    
+    function loop() {
+      requestAnimationFrame(loop);
+      update(clock.getDelta());
+      renderer.render(scene, camera);
+    }
+    window.addEventListener("resize", updateLayout);
+    resetGame();
+    loop();
+  </script>
+</body>
+</html>
