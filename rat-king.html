@@ -2,219 +2,331 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Rat King: The Chain</title>
+  <title>Rat King: Physical Rip & Squish</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Averia+Serif+Libre:wght@300;400;700&display=swap" rel="stylesheet">
   <style>
-    body { margin: 0; background: #010101; overflow: hidden; color: #eee; font-family: 'Averia Serif Libre', serif; }
-    canvas { display: block; cursor: none; }
-    #ui { 
-      position: fixed; 
-      bottom: 40px; 
-      left: 40px; 
-      letter-spacing: 0.4em; 
-      text-transform: uppercase; 
-      font-size: 12px; 
-      pointer-events: none;
-      opacity: 0.6;
-    }
-    #score { font-size: 24px; color: #fff; display: block; margin-top: 10px; }
-    .hint { position: fixed; bottom: 40px; left: 40px; font-size: 10px; letter-spacing: 0.2em; color: #444; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { margin: 0; background: #010101; overflow: hidden; color: #eee; font-family: "Averia Serif Libre", serif; }
+    canvas { display: block; cursor: crosshair; }
+    #ui-container { position: fixed; bottom: 40px; right: 40px; z-index: 100; display: flex; flex-direction: column; align-items: flex-end; gap: 20px; }
+    #tweak-ui { display: flex; flex-direction: column; align-items: flex-end; gap: 12px; transition: 0.5s cubic-bezier(0.16, 1, 0.3, 1); transform-origin: bottom right; }
+    #tweak-ui.collapsed { transform: scale(0.8) translateY(20px); opacity: 0; pointer-events: none; }
+    #toggle-ui { width: 60px; height: 60px; cursor: pointer; image-rendering: pixelated; filter: grayscale(1) brightness(0.6); transition: 0.3s; }
+    #toggle-ui:hover { filter: grayscale(0) brightness(1); transform: scale(1.1); }
+    .strange-slider { position: relative; cursor: ew-resize; user-select: none; height: 26px; display: inline-block; white-space: nowrap; }
+    .slider-text { font-size: 14px; font-weight: 400; letter-spacing: 0.3em; text-transform: uppercase; line-height: 26px; }
+    .gray-text { color: #1a1a1a; }
+    .white-text-wrap { position: absolute; top: 0; left: 0; width: 0%; height: 100%; overflow: hidden; border-right: 1px solid #fff; pointer-events: none; }
+    .white-text { color: #fff; display: block; width: 400px; }
+    #info-left { position: fixed; bottom: 40px; left: 40px; letter-spacing: 0.2em; text-transform: uppercase; pointer-events: none; font-size: 10px; color: #666; }
+    #score { font-size: 24px; color: #fff; display: block; margin-top: 5px; }
+    .controls-hint { margin-top: 10px; color: #444; line-height: 1.6; transition: opacity 0.5s; opacity: 1; }
+	#tweak-ui:not(.collapsed) ~ #toggle-ui,
+	#info-left .controls-hint {
+	  opacity: 0;
+	}
   </style>
 </head>
 <body>
-  <div id="ui">
-    <span id="score">1</span>
+  <div id="info-left">
+    <div id="score">0</div>
+    <div class="controls-hint">
+      DRAG: Pull to Squish & rip<br>
+      RMB: Toggle Lock<br>
+    </div>
   </div>
+
+  <div id="ui-container">
+    <div id="tweak-ui" class="collapsed">
+      <div class="strange-slider" data-min="1.5" data-max="20" data-val="10.0"><div class="slider-text gray-text">Rip Force</div><div class="white-text-wrap"><div class="slider-text white-text">Rip Force</div></div></div>
+      <div class="strange-slider" data-min="0" data-max="1" data-val="0.08"><div class="slider-text gray-text">Metabolism</div><div class="white-text-wrap"><div class="slider-text white-text">Metabolism</div></div></div>
+      <div class="strange-slider" data-min="0.5" data-max="3" data-val="1.25"><div class="slider-text gray-text">Rat Size</div><div class="white-text-wrap"><div class="slider-text white-text">Rat Size</div></div></div>
+      <div class="strange-slider" data-min="0.4" data-max="2" data-val="0.9"><div class="slider-text gray-text">Spacing</div><div class="white-text-wrap"><div class="slider-text white-text">Spacing</div></div></div>
+      <div class="strange-slider" data-min="0" data-max="1" data-val="0.0"><div class="slider-text gray-text">Autoplay</div><div class="white-text-wrap"><div class="slider-text white-text">Autoplay</div></div></div>
+    </div>
+    <img src="rat.png" id="toggle-ui" alt="rat">
+  </div>
+
   <script type="importmap">
-  { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
+    { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
   </script>
+
   <script type="module">
     import * as THREE from "three";
     import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x010101);
-
     const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.z = 25; // Pulled back slightly more
+    camera.position.z = 30;
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     document.body.appendChild(renderer.domElement);
+    scene.add(new THREE.AmbientLight(0xffffff, 2.5));
 
-    const ambient = new THREE.AmbientLight(0xffffff, 2.5);
-    scene.add(ambient);
-
-    // Physics constants
-    const DAMPING = 0.92;
-    const SPRING = 0.12;
-    const CHAIN_DIST = 0.6;
-
-    let ratModel, ratTex;
-    const texLoader = new THREE.TextureLoader();
-    const objLoader = new OBJLoader();
+    let params = { tension: 10.0, metabolism: 0.08, ratSize: 1.25, spacing: 0.9, autoplay: 0.0 };
+    let ratModel = null, chains = [], crumbs = [], decayCounter = 0;
     
-    const swarm = [];
-    const crumbs = [];
-    const mouse = new THREE.Vector2();
-    const targetPos = new THREE.Vector3();
+    const clock = new THREE.Clock(); 
+    const mouseNdc = new THREE.Vector2(), mouseWorld = new THREE.Vector3(), raycaster = new THREE.Raycaster();
+    const dragPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0), planeHit = new THREE.Vector3();
+    let draggedRat = null, draggedRatOffset = new THREE.Vector3();
 
-    // The Lead Rat (Head of the whip)
-    const head = {
-      pos: new THREE.Vector3(0, 0, 0),
-      vel: new THREE.Vector3(0, 0, 0),
-    };
-
-    // Whip visual
-    const whipLineGeom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
-    const whipLineMat = new THREE.LineBasicMaterial({ color: 0x444444, transparent: true, opacity: 0.5 });
-    const whipLine = new THREE.Line(whipLineGeom, whipLineMat);
-    scene.add(whipLine);
-
-    texLoader.load('rattex.png', (tex) => {
-      ratTex = tex;
-      ratTex.magFilter = THREE.NearestFilter;
-      ratTex.minFilter = THREE.NearestFilter;
-      objLoader.load('model_0.obj', (obj) => {
-        obj.traverse(c => { 
-          if(c.isMesh) {
-            c.material = new THREE.MeshStandardMaterial({map: ratTex, roughness: 0.8, metalness: 0.2});
-            // Normalize scale
-            c.geometry.computeBoundingBox();
-            c.geometry.center();
-            const box = new THREE.Box3().setFromObject(c);
-            const size = box.getSize(new THREE.Vector3());
-            const maxDim = Math.max(size.x, size.y, size.z);
-            c.scale.set(1/maxDim, 1/maxDim, 1/maxDim);
-          }
-        });
+    new THREE.TextureLoader().load("rattex.png", (tex) => {
+      tex.magFilter = tex.minFilter = THREE.NearestFilter;
+      new OBJLoader().load("model_0.obj", (obj) => {
+        obj.traverse((c) => { if (c.isMesh) { c.material = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.8 }); c.geometry.center(); c.scale.setScalar(1 / Math.max(...new THREE.Box3().setFromObject(c).getSize(new THREE.Vector3()).toArray())); } });
         ratModel = obj;
-        addRatToChain();
+        const king = createChain();
+        addRatToChain(king, new THREE.Vector3(0, 0, 0)); 
+        for (let i = 0; i < 15; i++) spawnCrumb();
       });
     });
 
-    function addRatToChain() {
-      const g = ratModel.clone();
-      const s = 1.0; // Normalized model means we can use absolute units
-      g.scale.set(s, s, s);
-      scene.add(g);
+    function createChain() { const c = { swarm: [], autoCrumb: null }; chains.push(c); return c; }
+    
+    function addRatToChain(chain, pos = null) {
+      const root = new THREE.Group(); 
+      const clone = ratModel.clone();
       
-      const prevPos = swarm.length > 0 ? swarm[swarm.length-1].pos.clone() : new THREE.Vector3();
-      swarm.push({ 
-        mesh: g, 
-        pos: prevPos,
-        lastPos: prevPos.clone(),
-        offset: Math.random() * Math.PI * 2
+      clone.traverse(c => {
+        if (c.isMesh) {
+          c.material = c.material.clone();
+          c.material.transparent = true;
+          c.material.opacity = 0;
+        }
       });
-      document.getElementById('score').innerText = swarm.length;
+    
+      root.add(clone);
+      const hit = new THREE.Mesh(new THREE.SphereGeometry(0.9, 8, 8), new THREE.MeshBasicMaterial({ visible: false }));
+      root.add(hit); 
+      scene.add(root);
+    
+      const lastRat = chain.swarm[chain.swarm.length - 1];
+      const start = pos || (lastRat ? lastRat.pos.clone().add(new THREE.Vector3(0, -0.1, 0)) : new THREE.Vector3());
+    
+      const rat = { 
+        root, 
+        hit, 
+        pos: start, 
+        vel: new THREE.Vector3(), 
+        locked: false, 
+        pulseForce: 0, 
+        spawnScale: 0, 
+        opacity: 0,
+        chain 
+      };
+      hit.userData.rat = rat; 
+      chain.swarm.push(rat); 
+      return rat;
     }
 
     function spawnCrumb() {
-      const geom = new THREE.BoxGeometry(0.3, 0.3, 0.3);
-      const mat = new THREE.MeshStandardMaterial({ 
-        color: 0xffffff, 
-        emissive: 0xffffff, 
-        emissiveIntensity: 0.5 
-      });
-      const mesh = new THREE.Mesh(geom, mat);
-      
-      const aspect = window.innerWidth / window.innerHeight;
-      mesh.position.set(
-        (Math.random() - 0.5) * 40 * aspect,
-        (Math.random() - 0.5) * 40,
-        0
-      );
-      scene.add(mesh);
-      crumbs.push(mesh);
+      const m = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff }));
+      m.position.set((Math.random()-0.5)*50, (Math.random()-0.5)*30, 0); scene.add(m); crumbs.push(m);
     }
 
-    for(let i=0; i<8; i++) spawnCrumb();
+    function splitChainAtRat(rat) {
+      const old = rat.chain; const idx = old.swarm.indexOf(rat);
+      if (idx <= 0) return;
+      const ripped = old.swarm.splice(idx);
+      const next = createChain(); next.swarm = ripped;
+      ripped.forEach(r => { r.chain = next; r.locked = false; });
+    }
 
-    window.addEventListener('mousemove', (e) => {
-      mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
-      mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
-      
-      const vector = new THREE.Vector3(mouse.x, mouse.y, 0.5);
-      vector.unproject(camera);
-      const dir = vector.sub(camera.position).normalize();
-      const distance = -camera.position.z / dir.z;
-      targetPos.copy(camera.position).add(dir.multiplyScalar(distance));
+    window.addEventListener("mousedown", (e) => {
+      const r = findPickedRat(); if (!r) return;
+      if (e.button === 2) { r.locked = !r.locked; return; }
+      draggedRat = r; draggedRatOffset.copy(r.pos).sub(mouseWorld);
+    });
+    window.addEventListener("mousemove", (e) => {
+      mouseNdc.set((e.clientX/window.innerWidth)*2-1, -(e.clientY/window.innerHeight)*2+1);
+      raycaster.setFromCamera(mouseNdc, camera); raycaster.ray.intersectPlane(dragPlane, planeHit); mouseWorld.copy(planeHit);
+    });
+    window.addEventListener("mouseup", () => draggedRat = null);
+    window.addEventListener("contextmenu", e => e.preventDefault());
+
+    function findPickedRat() {
+      raycaster.setFromCamera(mouseNdc, camera);
+      const hits = raycaster.intersectObjects(chains.flatMap(c => c.swarm.map(r => r.hit)));
+      return hits.length ? hits[0].object.userData.rat : null;
+    }
+
+    function findNearestCrumb(pos) {
+      if (!crumbs.length) return null;
+      let nearest = null, minDist = Infinity;
+      for (let i = 0; i < crumbs.length; i++) {
+        const d = pos.distanceTo(crumbs[i].position);
+        if (d < minDist) { minDist = d; nearest = crumbs[i]; }
+      }
+      return nearest;
+    }
+
+    function updateChains(dt, time) {
+      chains.forEach((chain, cIdx) => {
+        chain.swarm.forEach((rat, i) => {
+          const prev = i > 0 ? chain.swarm[i - 1] : null;
+          let currentRipForce = 0;
+
+          // --- 1. HEAD CONTROL (AI vs Mouse Follow) ---
+          if (i === 0 && !rat.locked && rat !== draggedRat) {
+            // Autoplay is on: Snake acts autonomously
+            if (params.autoplay > 0.5) {
+              const targetCrumb = findNearestCrumb(rat.pos);
+              if (targetCrumb) {
+                const dir = targetCrumb.position.clone().sub(rat.pos).normalize();
+                const targetSpeed = 4.5; // Smooth slither speed
+                const steerForce = dir.multiplyScalar(targetSpeed).sub(rat.vel);
+                
+                rat.vel.add(steerForce.multiplyScalar(dt * 3));
+                rat.pos.add(rat.vel.clone().multiplyScalar(dt));
+              }
+            } else {
+              // Autoplay is off: Main head follows mouse
+              if (cIdx === 0) {
+                rat.pos.x += (mouseWorld.x - rat.pos.x) * (1 - Math.exp(-6 * dt));
+                rat.pos.y += (mouseWorld.y - rat.pos.y) * (1 - Math.exp(-6 * dt));
+              } else {
+                // Secondary split heads slowly drift if autoplay is off and they aren't dragged
+                rat.vel.y -= 0.005;
+                rat.pos.add(rat.vel.clone().multiplyScalar(dt * 60));
+              }
+            }
+          }
+
+          // --- 2. DRAGGED STATE ---
+          else if (rat === draggedRat) {
+            const target = mouseWorld.clone().add(draggedRatOffset);
+            currentRipForce = rat.pos.distanceTo(target);
+            rat.pos.lerp(target, 0.3);
+            rat.vel.set(0,0,0);
+            
+            if (prev && rat.pos.distanceTo(prev.pos) > params.tension) {
+                splitChainAtRat(rat);
+                draggedRat = null;
+            }
+          } 
+          
+          // --- 3. BODY FOLLOW LOGIC (SNAKE BEHAVIOR) ---
+          else if (!rat.locked) {
+            if (prev) {
+              const diff = prev.pos.clone().sub(rat.pos);
+              const dist = diff.length();
+              
+              if (dist > params.tension) {
+                splitChainAtRat(rat);
+              }
+              
+              if (dist > params.spacing) {
+                const stretch = dist - params.spacing;
+                const direction = diff.normalize();
+                
+                // Soft coordinate tethering prevents hyper-elastic spring-back loops
+                const tetherPull = direction.clone().multiplyScalar(stretch * 0.45);
+                rat.pos.add(tetherPull);
+
+                // Controlled velocity injection
+                rat.vel.add(direction.multiplyScalar(stretch * 0.8));
+              }
+            }
+            
+            // Progressive tail-damping absorbs whipping oscillations
+            const tailFactor = i / Math.max(chain.swarm.length, 1);
+            const dynamicDamping = 0.65 - (tailFactor * 0.15); 
+            rat.vel.multiplyScalar(dynamicDamping);
+            
+            // Keeps structural speeds balanced 
+            const maxSpeed = 3.0;
+            if (rat.vel.length() > maxSpeed) {
+              rat.vel.setLength(maxSpeed);
+            }
+            
+            rat.pos.add(rat.vel.clone().multiplyScalar(dt * 60));
+          }
+
+          // --- 4. VISUAL RENDERING ---
+          rat.spawnScale += (1 - rat.spawnScale) * (1 - Math.exp(-5 * dt));
+          rat.opacity += (1 - rat.opacity) * (1 - Math.exp(-3 * dt));
+
+          rat.root.traverse(c => {
+            if (c.isMesh) c.material.opacity = rat.opacity;
+          });
+
+          rat.root.position.copy(rat.pos);
+          
+          const look = prev ? prev.pos : rat.pos.clone().add(rat.vel.length() > 0.01 ? rat.vel : new THREE.Vector3(1,0,0));
+          rat.root.rotation.z = Math.atan2(look.y - rat.pos.y, look.x - rat.pos.x) + Math.PI / 2;
+          
+          const stretch = Math.min(1.6, 1 + (currentRipForce * 0.2));
+          const squish = 1 / Math.sqrt(stretch);
+          
+          const baseScale = params.ratSize * rat.spawnScale;
+          rat.root.scale.set(baseScale * squish, baseScale * stretch, baseScale * squish);
+          
+          const pulse = Math.sin(time * 8 + i * 0.45) * 0.05 + rat.pulseForce;
+          rat.root.scale.addScalar(pulse);
+          rat.pulseForce *= 0.9;
+        });
+      });
+    }
+
+    const sliders = document.querySelectorAll(".strange-slider");
+    const sliderStates = Array.from(sliders).map(s => {
+      let v = parseFloat(s.dataset.val), t = v, drag = false;
+      const fill = s.querySelector(".white-text-wrap");
+      const up = (x) => { t = parseFloat(s.dataset.min) + Math.max(0, Math.min(1, (x - s.getBoundingClientRect().left) / s.getBoundingClientRect().width)) * (parseFloat(s.dataset.max) - parseFloat(s.dataset.min)); };
+      s.addEventListener("mousedown", e => { drag = true; up(e.clientX); });
+      window.addEventListener("mousemove", e => { if (drag) up(e.clientX); });
+      window.addEventListener("mouseup", () => drag = false);
+      return { update: (dt) => { v += (t - v) * (1 - Math.exp(-15 * dt)); fill.style.width = ((v - s.dataset.min) / (s.dataset.max - s.dataset.min) * 100) + "%"; return v; } };
     });
 
+    const toggleUiBtn = document.getElementById("toggle-ui");
+    const tweakUi = document.getElementById("tweak-ui");
+    const controlsHint = document.querySelector(".controls-hint");
+    
+    toggleUiBtn.onclick = () => {
+      const isCollapsed = tweakUi.classList.toggle("collapsed");
+      controlsHint.style.opacity = isCollapsed ? "0" : "1";
+    };
     function animate() {
-      requestAnimationFrame(animate);
-      if (!ratModel) return;
+      requestAnimationFrame(animate); if (!ratModel) return;
+      const dt = clock.getDelta();
+      const time = performance.now() * 0.001;
 
-      const time = Date.now() * 0.001;
+      params.tension = sliderStates[0].update(dt); params.metabolism = sliderStates[1].update(dt);
+      params.ratSize = sliderStates[2].update(dt); params.spacing = sliderStates[3].update(dt);
+      params.autoplay = sliderStates[4].update(dt); // Grab real-time autoplay value
 
-      // 1. Update Head (Whip Physics)
-      const force = new THREE.Vector3().subVectors(targetPos, head.pos).multiplyScalar(SPRING);
-      head.vel.add(force);
-      head.vel.multiplyScalar(DAMPING);
-      head.pos.add(head.vel);
+      decayCounter += dt * params.metabolism;
+      if (decayCounter >= 1) { 
+        const r = chains.sort((a,b) => b.swarm.length - a.swarm.length)[0];
+        if (r && r.swarm.length > 5) scene.remove(r.swarm.pop().root); 
+        decayCounter = 0; 
+      }
 
-      // Update whip visual
-      whipLine.geometry.setFromPoints([targetPos, head.pos]);
-      whipLine.geometry.attributes.position.needsUpdate = true;
-
-      // 2. Update Chain (Follower Physics)
-      swarm.forEach((rat, i) => {
-        const leaderPos = (i === 0) ? head.pos : swarm[i - 1].pos;
-        
-        const diff = new THREE.Vector3().subVectors(rat.pos, leaderPos);
-        const dist = diff.length();
-        
-        if (dist > CHAIN_DIST) {
-          diff.normalize().multiplyScalar(CHAIN_DIST);
-          rat.pos.copy(leaderPos).add(diff);
-        }
-
-        const dir = new THREE.Vector3().subVectors(leaderPos, rat.pos);
-        if (dir.length() > 0.01) {
-          const targetAngle = Math.atan2(dir.y, dir.x) + Math.PI/2;
-          rat.mesh.rotation.z = THREE.MathUtils.lerp(rat.mesh.rotation.z, targetAngle, 0.2);
-        }
-
-        const wiggle = Math.sin(time * 10 + i * 0.5) * 0.15;
-        rat.mesh.position.x = rat.pos.x + Math.cos(rat.mesh.rotation.z) * wiggle;
-        rat.mesh.position.y = rat.pos.y + Math.sin(rat.mesh.rotation.z) * wiggle;
-        rat.mesh.position.z = Math.sin(time * 4 + i) * 0.2;
-        
-        const bounce = Math.abs(Math.sin(time * 15 + i * 0.3)) * 0.1;
-        rat.mesh.scale.setScalar(0.8 + bounce);
-      });
-
-      // 3. Collision with Crumbs
+      updateChains(dt, time);
+      
       crumbs.forEach((c, i) => {
         c.rotation.y += 0.05;
-        c.rotation.z += 0.02;
         
-        let eaten = false;
-        swarm.forEach(rat => {
-          if (rat.pos.distanceTo(c.position) < 1.0) eaten = true;
+        chains.forEach(chain => {
+          if (chain.swarm.length && chain.swarm[0].pos.distanceTo(c.position) < 2.0) {
+            scene.remove(c); crumbs.splice(i, 1); spawnCrumb();
+            addRatToChain(chain);
+            chain.swarm.forEach((r, idx) => r.pulseForce = 0.3 * Math.exp(-idx * 0.1));
+          }
         });
-
-        if (eaten) {
-          scene.remove(c);
-          crumbs.splice(i, 1);
-          addRatToChain();
-          spawnCrumb();
-        }
       });
 
+      chains = chains.filter(c => c.swarm.length > 0);
+      document.getElementById("score").innerText = chains.reduce((s, c) => s + c.swarm.length, 0);
       renderer.render(scene, camera);
     }
-    
-    window.addEventListener('resize', () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-    });
-
     animate();
+    window.addEventListener("resize", () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
   </script>
 </body>
 </html>
