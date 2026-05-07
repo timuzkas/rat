@@ -69,7 +69,7 @@
       transform: scale(1.1) rotate(5deg);
     }
 
-    /* Strange Text Slider */
+    /* slider */
     .strange-slider {
       position: relative;
       cursor: ew-resize;
@@ -96,7 +96,7 @@
       position: absolute;
       top: 0;
       left: 0;
-      width: 0%; /* Dynamic */
+      width: 0%;
       height: 100%;
       overflow: hidden;
       border-right: 1px solid #fff;
@@ -106,7 +106,7 @@
     .white-text {
       color: #fff;
       display: block;
-      width: 400px; /* Large fixed width to prevent wrapping */
+      width: 400px;
     }
 
     #info {
@@ -127,7 +127,6 @@
 
   <div id="ui-container">
     <div id="tweak-ui" class="collapsed">
-      <!-- Custom Sliders -->
       <div class="strange-slider" id="slider-speed" data-min="0" data-max="3" data-val="1">
         <div class="slider-text gray-text">Simulation Speed</div>
         <div class="white-text-wrap">
@@ -232,7 +231,6 @@
         obj.traverse(child => {
           if (child.isMesh) {
             child.material = new THREE.MeshStandardMaterial({ map: ratTex, metalness: 0.1, roughness: 0.8 });
-            // Normalize geometry for consistent scaling
             child.geometry.computeBoundingBox();
             child.geometry.center();
             const box = new THREE.Box3().setFromObject(child);
@@ -255,14 +253,13 @@
         orbitPivot.rotation.x = Math.random() * Math.PI;
         orbitPivot.rotation.y = Math.random() * Math.PI;
         
-        // Much wider spacing
         const radius = params.baseRadius + (i * params.spread * 0.4);
         
         const ring = new THREE.Mesh(new THREE.TorusGeometry(radius, 0.01, 16, 120), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.03 }));
         orbitPivot.add(ring);
 
         const rat = ratModel.clone();
-        const s = 1.2 * params.scale; // Adjusted for normalized model
+        const s = 1.2 * params.scale;
         rat.scale.set(s, s, s);
         rat.position.x = radius;
         rat.userData.offset = Math.random() * Math.PI * 2;
@@ -274,7 +271,7 @@
       }
     }
 
-    // --- Strange UI Slider Logic ---
+    // slider logic
     const sliders = document.querySelectorAll('.strange-slider');
     const sliderStates = [];
 
@@ -321,7 +318,7 @@
       const dt = clock.getDelta();
       const time = clock.getElapsedTime();
 
-      // Update Slider Params
+      // update slider params
       params.speed = sliderStates[0].update(dt);
       const newCount = Math.round(sliderStates[1].update(dt));
       if (newCount !== params.count) { params.count = newCount; refreshSimulation(); }
@@ -342,7 +339,6 @@
 		rat.traverse(child => {
 		        if (child.isMesh) {
 		           if (params.glitch > 0.4) {
-		             // Jitter position to simulate "pixel floating"
 		             const jitter = (params.glitch - 0.4) * 0.5;
 		             child.position.set(
 		              (Math.random() - 0.5) * jitter,

@@ -170,33 +170,31 @@
           const prev = i > 0 ? chain.swarm[i - 1] : null;
           let currentRipForce = 0;
 
-          // --- 1. HEAD CONTROL (AI vs Mouse Follow) ---
+          // head control
           if (i === 0 && !rat.locked && rat !== draggedRat) {
-            // Autoplay is on: Snake acts autonomously
             if (params.autoplay > 0.5) {
               const targetCrumb = findNearestCrumb(rat.pos);
               if (targetCrumb) {
                 const dir = targetCrumb.position.clone().sub(rat.pos).normalize();
-                const targetSpeed = 4.5; // Smooth slither speed
+                const targetSpeed = 4.5;
                 const steerForce = dir.multiplyScalar(targetSpeed).sub(rat.vel);
                 
                 rat.vel.add(steerForce.multiplyScalar(dt * 3));
                 rat.pos.add(rat.vel.clone().multiplyScalar(dt));
               }
             } else {
-              // Autoplay is off: Main head follows mouse
               if (cIdx === 0) {
                 rat.pos.x += (mouseWorld.x - rat.pos.x) * (1 - Math.exp(-6 * dt));
                 rat.pos.y += (mouseWorld.y - rat.pos.y) * (1 - Math.exp(-6 * dt));
               } else {
-                // Secondary split heads slowly drift if autoplay is off and they aren't dragged
+                // split heads slowly drift
                 rat.vel.y -= 0.005;
                 rat.pos.add(rat.vel.clone().multiplyScalar(dt * 60));
               }
             }
           }
 
-          // --- 2. DRAGGED STATE ---
+          // dragged state
           else if (rat === draggedRat) {
             const target = mouseWorld.clone().add(draggedRatOffset);
             currentRipForce = rat.pos.distanceTo(target);
@@ -209,7 +207,7 @@
             }
           } 
           
-          // --- 3. BODY FOLLOW LOGIC (SNAKE BEHAVIOR) ---
+          // body follow
           else if (!rat.locked) {
             if (prev) {
               const diff = prev.pos.clone().sub(rat.pos);
@@ -223,21 +221,20 @@
                 const stretch = dist - params.spacing;
                 const direction = diff.normalize();
                 
-                // Soft coordinate tethering prevents hyper-elastic spring-back loops
+                // soft tethering
                 const tetherPull = direction.clone().multiplyScalar(stretch * 0.45);
                 rat.pos.add(tetherPull);
 
-                // Controlled velocity injection
                 rat.vel.add(direction.multiplyScalar(stretch * 0.8));
               }
             }
             
-            // Progressive tail-damping absorbs whipping oscillations
+            // tail damping
             const tailFactor = i / Math.max(chain.swarm.length, 1);
             const dynamicDamping = 0.65 - (tailFactor * 0.15); 
             rat.vel.multiplyScalar(dynamicDamping);
             
-            // Keeps structural speeds balanced 
+            // speed cap
             const maxSpeed = 3.0;
             if (rat.vel.length() > maxSpeed) {
               rat.vel.setLength(maxSpeed);
@@ -246,7 +243,7 @@
             rat.pos.add(rat.vel.clone().multiplyScalar(dt * 60));
           }
 
-          // --- 4. VISUAL RENDERING ---
+          // rendering
           rat.spawnScale += (1 - rat.spawnScale) * (1 - Math.exp(-5 * dt));
           rat.opacity += (1 - rat.opacity) * (1 - Math.exp(-3 * dt));
 
@@ -298,7 +295,7 @@
 
       params.tension = sliderStates[0].update(dt); params.metabolism = sliderStates[1].update(dt);
       params.ratSize = sliderStates[2].update(dt); params.spacing = sliderStates[3].update(dt);
-      params.autoplay = sliderStates[4].update(dt); // Grab real-time autoplay value
+      params.autoplay = sliderStates[4].update(dt);
 
       decayCounter += dt * params.metabolism;
       if (decayCounter >= 1) { 

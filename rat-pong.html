@@ -163,7 +163,7 @@
     import * as THREE from "three";
     import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
 
-    // --- Config ---
+    // config
     let FIELD_W = 26;
     let FIELD_H = 16;
     const PADDLE_W = 0.25;
@@ -172,7 +172,7 @@
     const PADDLE_MARGIN = 1.2;
     const RES_SCALE = 0.3;
 
-    // --- State ---
+    // state
     let autoplay = false;
     let playerScore = 0;
     let cpuScore = 0;
@@ -181,8 +181,6 @@
 
     let mouseY = 0;
     let mouseActive = false;
-
-    // Insanity
     let insanity = 0;
     let targetInsanity = 0;
     let draggingInsanity = false;
@@ -191,22 +189,22 @@
     let ratScale = 1;
     let lastMousePos = new THREE.Vector2();
 
-    // Paddles
+    // paddles
     let playerY = 0;
     let cpuY = 0;
 
-    // Ball
+    // ball
     let ballPos = new THREE.Vector3(0, 0, 0);
     let ballVel = new THREE.Vector3(6, 3, 0);
     let ballSpin = new THREE.Vector3(0, 0, 0);
     let ballSpinVel = new THREE.Vector3(0, 0, 8);
 
-    // Rat
+    // rat
     let ratGroup = new THREE.Group();
     let ratMesh = null;
     let ratGhosts = []; 
 
-    // --- Scene ---
+    // scene
     const overlay = document.getElementById("glitch-overlay");
     const canvas = document.getElementById("canvas");
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
@@ -456,7 +454,7 @@
           playerPaddle.position.y = playerY;
           cpuPaddle.position.y = cpuY;
     
-          // --- The Trip ---
+          // insanity effects
           const insanityThreshold = 0.2;
           const activeInsanity =
             Math.max(0, insanity - insanityThreshold) / (1 - insanityThreshold);
@@ -485,7 +483,7 @@
             });
           });
     
-          // Glitch visual
+          // glitch fx
           if (insanity > 0.5 && Math.random() > 0.95 - insanity * 0.1) {
             overlay.style.background = `rgba(255,255,255,${insanity * 0.2})`;
             setTimeout(() => (overlay.style.background = "transparent"), 20);
