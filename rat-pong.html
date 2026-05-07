@@ -407,7 +407,7 @@
     function scorePoint(winner) {
       gameActive = false;
       const el = document.getElementById(winner === "player" ? "p-score" : "c-score");
-      ilastWinner = winner; if (winner === "player") playerScore++; else cpuScore++;
+      lastWinner = winner; if (winner === "player") playerScore++; else cpuScore++;
       el.textContent = winner === "player" ? playerScore : cpuScore;
       el.classList.add("pop");
       setTimeout(() => el.classList.remove("pop"), 400);
