@@ -1,0 +1,1600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+  <title>Rat Runner</title>
+  <link
+    rel="preconnect"
+    href="https://fonts.googleapis.com"
+  >
+  <link
+    rel="preconnect"
+    href="https://fonts.gstatic.com"
+    crossorigin
+  >
+  <link
+    href="https://fonts.googleapis.com/css2?family=Averia+Serif+Libre:ital,wght@0,300;0,400;0,700;1,300;1,400;1,700&display=swap"
+    rel="stylesheet"
+  >
+  <style>
+    :root {
+      --bg: #020202;
+      --fg: #e7e7e7;
+      --muted: #6e6e6e;
+      --dim: #1a1a1a;
+      --line: #111111;
+      --warn: #ffffff;
+      --font-main: "Averia Serif Libre", serif;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      font-family: var(--font-main);
+      color: var(--fg);
+    }
+
+    body {
+      user-select: none;
+      cursor: default;
+    }
+
+    #canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      background: #000;
+    }
+
+    #hud {
+      position: fixed;
+      bottom: 28px;
+      left: 32px;
+      right: 32px;
+      z-index: 10;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      pointer-events: none;
+      mix-blend-mode: screen;
+    }
+
+    .hud-block {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .hud-label {
+      font-size: 10px;
+      letter-spacing: 0.45em;
+      text-transform: uppercase;
+      color: #505050;
+    }
+
+    .hud-value {
+      font-size: 22px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: #f0f0f0;
+    }
+
+    #left-meta {
+      align-items: flex-start;
+    }
+
+
+    #center-warning {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      z-index: 15;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.25s ease;
+      mix-blend-mode: screen;
+    }
+
+    #center-warning.visible {
+      opacity: 1;
+    }
+
+    #warning-main {
+      font-size: 48px;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: #f6f6f6;
+    }
+
+    #warning-sub {
+      margin-top: 12px;
+      font-size: 12px;
+      letter-spacing: 0.35em;
+      text-transform: uppercase;
+      color: #757575;
+    }
+
+    #controls-hint {
+      position: fixed;
+      left: 32px;
+      bottom: 28px;
+      z-index: 10;
+      pointer-events: none;
+      color: #4d4d4d;
+      font-size: 10px;
+      letter-spacing: 0.34em;
+      text-transform: uppercase;
+      line-height: 1.9;
+      max-width: 520px;
+      transition: opacity 0.6s ease;
+    }
+
+    #controls-hint.hidden {
+      opacity: 0;
+    }
+
+    #top-noise {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      pointer-events: none;
+      opacity: 0.08;
+      background-image:
+        linear-gradient(
+          transparent 0%,
+          rgba(255, 255, 255, 0.03) 48%,
+          transparent 100%
+        );
+      background-size: 100% 4px;
+      mix-blend-mode: screen;
+      animation: scan 9s linear infinite;
+    }
+
+    #glitch-text {
+      position: fixed;
+      right: 32px;
+      bottom: 28px;
+      z-index: 12;
+      pointer-events: none;
+      font-size: 12px;
+      letter-spacing: 0.45em;
+      text-transform: uppercase;
+      color: #2b2b2b;
+      text-align: right;
+      min-width: 260px;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+
+    #death-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 30;
+      background:
+        radial-gradient(
+          circle at center,
+          rgba(255, 255, 255, 0.03),
+          rgba(0, 0, 0, 0.92) 55%,
+          rgba(0, 0, 0, 0.98)
+        );
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.5s ease;
+    }
+
+    #death-overlay.visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    #death-card {
+      width: min(92vw, 620px);
+      padding: 42px 36px;
+      text-align: center;
+    }
+
+    #death-title {
+      font-size: 40px;
+      letter-spacing: 0.24em;
+      text-transform: uppercase;
+      color: #f1f1f1;
+      margin-bottom: 16px;
+    }
+
+    #death-score {
+      font-size: 14px;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: #747474;
+      margin-bottom: 28px;
+      line-height: 1.9;
+    }
+
+    #restart-btn {
+      border: 1px solid #222;
+      background: #090909;
+      color: #dcdcdc;
+      font-family: var(--font-main);
+      font-size: 14px;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      padding: 14px 22px;
+      cursor: pointer;
+      transition:
+        transform 0.2s ease,
+        border-color 0.2s ease,
+        color 0.2s ease,
+        background 0.2s ease;
+    }
+
+    #restart-btn:hover {
+      transform: scale(1.03);
+      border-color: #3a3a3a;
+      color: #fff;
+      background: #0d0d0d;
+    }
+
+    @keyframes scan {
+      from {
+        transform: translateY(-20%);
+      }
+      to {
+        transform: translateY(20%);
+      }
+    }
+
+    #ui-container {
+          position: fixed;
+          bottom: 40px;
+          right: 40px;
+          z-index: 25;
+          display: flex;
+          flex-direction: column;
+          align-items: flex-end;
+          gap: 20px;
+          pointer-events: auto;
+          user-select: none;
+          mix-blend-mode: screen;
+        }
+    
+        #tweak-ui {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-end;
+          gap: 15px;
+          transition:
+            opacity 0.5s ease,
+            transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+          transform-origin: bottom right;
+          pointer-events: auto;
+        }
+    
+        #tweak-ui.collapsed {
+          transform: scale(0.8) translateY(20px);
+          opacity: 0;
+          pointer-events: none;
+        }
+    
+        #toggle-ui {
+          width: 60px;
+          height: 60px;
+          cursor: pointer;
+          image-rendering: pixelated;
+          filter: grayscale(1) brightness(0.6);
+          transition:
+            filter 0.3s ease,
+            transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+    
+        #toggle-ui:hover {
+          filter: grayscale(0) brightness(1);
+          transform: scale(1.1) rotate(5deg);
+        }
+    
+        .strange-slider {
+          position: relative;
+          cursor: ew-resize;
+          user-select: none;
+          height: 30px;
+          display: inline-block;
+          white-space: nowrap;
+        }
+    
+        .slider-text {
+          font-size: 16px;
+          font-weight: 400;
+          letter-spacing: 0.3em;
+          text-transform: uppercase;
+          white-space: nowrap;
+          line-height: 30px;
+        }
+    
+        .gray-text {
+          color: #1a1a1a;
+        }
+    
+        .white-text-wrap {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 0%;
+          height: 100%;
+          overflow: hidden;
+          border-right: 1px solid #fff;
+          pointer-events: none;
+        }
+    
+        .white-text {
+          display: block;
+          width: 400px;
+          color: #fff;
+        }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+
+  <div id="hud">
+    <div
+      class="hud-block"
+      id="left-meta"
+    >
+      <div class="hud-label">Distance</div>
+      <div
+        class="hud-value"
+        id="distance-value"
+      >
+        0000
+      </div>
+    </div>
+
+  </div>
+
+
+  <div id="center-warning">
+    <div id="warning-main">rat</div>
+    <div id="warning-sub">keep moving</div>
+  </div>
+
+  <div id="controls-hint">
+    A / D or ← / → to switch lanes<br>
+    W / Space / ↑ to jump<br>
+    S / ↓ to slide
+  </div>
+
+  <div id="glitch-text">rat rat rat</div>
+
+  <div id="ui-container">
+      <div id="tweak-ui" class="collapsed">
+        <div
+          class="strange-slider"
+          id="slider-liquid"
+          data-min="0"
+          data-max="1"
+          data-val="0"
+        >
+          <div class="slider-text gray-text">Liquidness</div>
+          <div class="white-text-wrap">
+            <div class="slider-text white-text">Liquidness</div>
+          </div>
+        </div>
+  
+        <div
+          class="strange-slider"
+          id="slider-warp"
+          data-min="0"
+          data-max="1"
+          data-val="0"
+        >
+          <div class="slider-text gray-text">Kombucha blood level</div>
+          <div class="white-text-wrap">
+            <div class="slider-text white-text">Kombucha blood level</div>
+          </div>
+        </div>
+  
+        <div
+          class="strange-slider"
+          id="slider-melt"
+          data-min="0"
+          data-max="1"
+          data-val="0"
+        >
+          <div class="slider-text gray-text">Melt</div>
+          <div class="white-text-wrap">
+            <div class="slider-text white-text">Melt</div>
+          </div>
+        </div>
+  
+        <div
+          class="strange-slider"
+          id="slider-insanity"
+          data-min="0"
+          data-max="1"
+          data-val="0"
+        >
+          <div class="slider-text gray-text">Insanity</div>
+          <div class="white-text-wrap">
+            <div class="slider-text white-text">Insanity</div>
+          </div>
+        </div>
+      </div>
+  
+      <img
+        src="rat.png"
+        id="toggle-ui"
+        alt="rat"
+      >
+    </div>
+
+  <div id="top-noise"></div>
+
+  <div id="death-overlay">
+    <div id="death-card">
+      <div id="death-title">caught</div>
+      <div id="death-score">distance // 0000</div>
+      <button id="restart-btn">run again</button>
+    </div>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/":
+          "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
+
+    const canvas = document.getElementById("canvas");
+    const renderer = new THREE.WebGLRenderer({
+      canvas,
+      antialias: true
+    });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+    renderer.setPixelRatio(1);
+    renderer.domElement.style.imageRendering = "pixelated";
+    renderer.domElement.style.imageRendering = "crisp-edges";
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x020202);
+    scene.fog = new THREE.Fog(0x020202, 12, 75);
+
+    const camera = new THREE.PerspectiveCamera(
+      68,
+      window.innerWidth / window.innerHeight,
+      0.1,
+      250
+    );
+    camera.position.set(0, 3.2, 8.5);
+
+    const ambient = new THREE.AmbientLight(0xffffff, 1.15);
+    scene.add(ambient);
+
+    const topLight = new THREE.DirectionalLight(0xffffff, 0.7);
+    topLight.position.set(3, 8, 5);
+    scene.add(topLight);
+
+    const laneXs = [-2.8, 0, 2.8];
+    const chunkLength = 24;
+    const visibleChunks = 10;
+    const chunks = [];
+    const obstaclePool = [];
+    let ratPrototype = null;
+
+    const game = {
+      started: false,
+      alive: true,
+      speed: 10,
+      targetSpeed: 10,
+      distance: 0,
+      laneIndex: 1,
+      targetLaneIndex: 1,
+      laneX: 0,
+      y: 0,
+      yVel: 0,
+      grounded: true,
+      sliding: false,
+      slideT: 0,
+      jumpCooldown: 0,
+      trauma: 0,
+      glitch: 0,
+      glitchTarget: 0,
+      warning: 0,
+      scoreFlash: 0,
+      schizoTimer: 0,
+      ghostTimer: 0,
+      uiCorruptTimer: 0,
+      deadTimer: 0
+    };
+
+    const tweaks = {
+      liquid: 0,
+      warp: 0,
+      melt: 0,
+      insanity: 0
+    };
+    
+    const tweakTargets = {
+      liquid: 0,
+      warp: 0,
+      melt: 0,
+      insanity: 0
+    };
+    
+
+    let screenShake = 0;
+    let screenShakeTarget = 0;
+
+    let isSquishing = false;
+    let squishStart = new THREE.Vector2();
+    let squishDrag = new THREE.Vector2();
+    let ratBaseScale = 1;
+
+    const player = new THREE.Group();
+    scene.add(player);
+
+    const ratHolder = new THREE.Group();
+    player.add(ratHolder);
+
+    const ghostRat = new THREE.Group();
+    ghostRat.visible = false;
+    scene.add(ghostRat);
+
+    const floorGroup = new THREE.Group();
+    scene.add(floorGroup);
+
+    const worldDecor = new THREE.Group();
+    scene.add(worldDecor);
+
+    const distanceValue = document.getElementById("distance-value");
+    const centerWarning = document.getElementById("center-warning");
+    const warningMain = document.getElementById("warning-main");
+    const warningSub = document.getElementById("warning-sub");
+    const controlsHint = document.getElementById("controls-hint");
+    const glitchText = document.getElementById("glitch-text");
+    const deathOverlay = document.getElementById("death-overlay");
+    const deathScore = document.getElementById("death-score");
+    const restartBtn = document.getElementById("restart-btn");
+
+    const keys = new Set();
+
+    function expLerp(current, target, speed, dt) {
+      return current + (target - current) * (1 - Math.exp(-speed * dt));
+    }
+
+    function dampVec3(vec, target, speed, dt) {
+      vec.x = expLerp(vec.x, target.x, speed, dt);
+      vec.y = expLerp(vec.y, target.y, speed, dt);
+      vec.z = expLerp(vec.z, target.z, speed, dt);
+    }
+
+    function rand(min, max) {
+      return min + Math.random() * (max - min);
+    }
+
+    function pick(arr) {
+      return arr[Math.floor(Math.random() * arr.length)];
+    }
+
+    function formatDistance(v) {
+      return Math.floor(v).toString().padStart(4, "0");
+    }
+
+    function clearGroup(group) {
+      while (group.children.length) group.remove(group.children[0]);
+    }
+
+    function makeLineMaterial(opacity = 1) {
+      return new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity,
+        wireframe: true
+      });
+    }
+
+    function makeSolidMaterial(color = 0x101010) {
+      return new THREE.MeshBasicMaterial({
+        color,
+        wireframe: true
+      });
+    }
+
+    function buildChunk(index) {
+      const group = new THREE.Group();
+      group.userData.index = index;
+      group.userData.worldZ = -index * chunkLength;
+      group.position.z = group.userData.worldZ;
+
+      const laneLineGeom = new THREE.BoxGeometry(0.05, 0.05, chunkLength);
+      for (let i = 0; i < laneXs.length; i++) {
+        const line = new THREE.Mesh(
+          laneLineGeom,
+          new THREE.MeshBasicMaterial({
+            color: 0x141414,
+            transparent: true,
+            opacity: 0.9
+          })
+        );
+        line.position.set(laneXs[i], -0.51, -chunkLength / 2);
+        group.add(line);
+      }
+
+      const borderGeom = new THREE.BoxGeometry(0.18, 2.2, chunkLength);
+      const leftBorder = new THREE.Mesh(
+        borderGeom,
+        new THREE.MeshBasicMaterial({
+          color: 0x121212,
+          wireframe: true
+        })
+      );
+      const rightBorder = leftBorder.clone();
+      leftBorder.position.set(-5.5, 0.55, -chunkLength / 2);
+      rightBorder.position.set(5.5, 0.55, -chunkLength / 2);
+      group.add(leftBorder, rightBorder);
+
+      const floor = new THREE.Mesh(
+        new THREE.BoxGeometry(12, 0.2, chunkLength),
+        new THREE.MeshBasicMaterial({
+          color: 0x090909,
+          wireframe: true
+        })
+      );
+      floor.position.set(0, -0.65, -chunkLength / 2);
+      group.add(floor);
+
+      const ceiling = new THREE.Mesh(
+        new THREE.BoxGeometry(12, 0.2, chunkLength),
+        new THREE.MeshBasicMaterial({
+          color: 0x080808,
+          wireframe: true,
+          transparent: true,
+          opacity: 0.35
+        })
+      );
+      ceiling.position.set(0, 4.5, -chunkLength / 2);
+      group.add(ceiling);
+
+      for (let i = 0; i < 4; i++) {
+        const pillarL = new THREE.Mesh(
+          new THREE.BoxGeometry(0.35, 4.8, 0.35),
+          makeSolidMaterial(0x171717)
+        );
+        const pillarR = pillarL.clone();
+        const localZ = -i * 6 - 3;
+        pillarL.position.set(-4.8, 1.6, localZ);
+        pillarR.position.set(4.8, 1.6, localZ);
+        group.add(pillarL, pillarR);
+      }
+
+      const backFrame = new THREE.Mesh(
+        new THREE.TorusGeometry(4.8, 0.05, 5, 4),
+        new THREE.MeshBasicMaterial({
+          color: 0x111111,
+          wireframe: true,
+          transparent: true,
+          opacity: 0.5
+        })
+      );
+      backFrame.rotation.z = Math.PI / 4;
+      backFrame.position.set(0, 1.8, -chunkLength / 2);
+      group.add(backFrame);
+
+      floorGroup.add(group);
+      chunks.push(group);
+      return group;
+    }
+
+    function createObstacleVisual(type) {
+      const group = new THREE.Group();
+
+      if (type === "block") {
+        const mesh = new THREE.Mesh(
+          new THREE.BoxGeometry(1.8, 2.2, 1.6),
+          makeSolidMaterial(0x262626)
+        );
+        mesh.position.y = 0.45;
+        group.add(mesh);
+      }
+
+      if (type === "bar") {
+        const left = new THREE.Mesh(
+          new THREE.BoxGeometry(0.18, 2.1, 0.18),
+          makeSolidMaterial(0x202020)
+        );
+        const right = left.clone();
+        const top = new THREE.Mesh(
+          new THREE.BoxGeometry(2.2, 0.25, 0.25),
+          makeSolidMaterial(0x303030)
+        );
+        left.position.set(-1, 0.3, 0);
+        right.position.set(1, 0.3, 0);
+        top.position.set(0, 1.55, 0);
+        group.add(left, right, top);
+      }
+
+      if (type === "low") {
+        const mesh = new THREE.Mesh(
+          new THREE.BoxGeometry(2, 0.75, 1.8),
+          makeSolidMaterial(0x232323)
+        );
+        mesh.position.y = -0.25;
+        group.add(mesh);
+      }
+
+      if (type === "totem") {
+        const base = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.55, 0.7, 2.6, 5, 1, true),
+          makeSolidMaterial(0x191919)
+        );
+        base.position.y = 0.6;
+        const ring = new THREE.Mesh(
+          new THREE.TorusGeometry(0.9, 0.05, 4, 5),
+          new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            wireframe: true,
+            transparent: true,
+            opacity: 0.35
+          })
+        );
+        ring.rotation.x = Math.PI / 2;
+        ring.position.y = 1.7;
+        group.add(base, ring);
+      }
+
+      return group;
+    }
+
+    function getObstacleFromPool() {
+      let obstacle = obstaclePool.find((o) => !o.active);
+      if (!obstacle) {
+        obstacle = {
+          active: false,
+          type: "block",
+          lane: 1,
+          worldZ: 0,
+          mesh: new THREE.Group(),
+          pulse: Math.random() * Math.PI * 2
+        };
+        worldDecor.add(obstacle.mesh);
+        obstaclePool.push(obstacle);
+      }
+      return obstacle;
+    }
+
+    function setObstacleType(obstacle, type) {
+      obstacle.type = type;
+      clearGroup(obstacle.mesh);
+      obstacle.mesh.add(createObstacleVisual(type));
+    }
+
+    function activateObstacle(type, lane, worldZ) {
+      const obstacle = getObstacleFromPool();
+      obstacle.active = true;
+      obstacle.lane = lane;
+      obstacle.worldZ = worldZ;
+      obstacle.pulse = Math.random() * Math.PI * 2;
+      setObstacleType(obstacle, type);
+      obstacle.mesh.visible = true;
+      obstacle.mesh.position.set(laneXs[lane], 0, worldZ);
+      obstacle.mesh.rotation.set(0, 0, 0);
+      obstacle.mesh.scale.set(1, 1, 1);
+      return obstacle;
+    }
+
+    function deactivateObstacle(obstacle) {
+      obstacle.active = false;
+      obstacle.mesh.visible = false;
+    }
+
+    function populateInitialObstacles() {
+      obstaclePool.forEach((o) => deactivateObstacle(o));
+
+      let z = -18;
+      for (let i = 0; i < 36; i++) {
+        const pattern = Math.random();
+
+        if (pattern < 0.28) {
+          activateObstacle("block", Math.floor(Math.random() * 3), z);
+        } else if (pattern < 0.5) {
+          activateObstacle("low", Math.floor(Math.random() * 3), z);
+        } else if (pattern < 0.72) {
+          activateObstacle("bar", Math.floor(Math.random() * 3), z);
+        } else if (pattern < 0.84) {
+          const blocked = Math.floor(Math.random() * 3);
+          activateObstacle("block", blocked, z);
+          if (Math.random() < 0.5) {
+            activateObstacle("totem", (blocked + 1) % 3, z - 3.5);
+          }
+        } else {
+          activateObstacle("totem", Math.floor(Math.random() * 3), z);
+        }
+
+        z -= rand(7, 12);
+      }
+    }
+
+    function recycleFarObstacles() {
+      let farthest = -20;
+
+      obstaclePool.forEach((o) => {
+        if (!o.active) return;
+        if (o.worldZ < farthest) farthest = o.worldZ;
+      });
+
+      obstaclePool.forEach((o) => {
+        if (!o.active) return;
+        if (o.worldZ > 8) {
+          const nextZ = farthest - rand(8, 12);
+          farthest = nextZ;
+          const pattern = Math.random();
+          const lane = Math.floor(Math.random() * 3);
+
+          if (pattern < 0.3) setObstacleType(o, "block");
+          else if (pattern < 0.58) setObstacleType(o, "low");
+          else if (pattern < 0.82) setObstacleType(o, "bar");
+          else setObstacleType(o, "totem");
+
+          o.lane = lane;
+          o.worldZ = nextZ;
+          o.mesh.position.set(laneXs[lane], 0, nextZ);
+          o.mesh.rotation.set(0, 0, 0);
+          o.mesh.scale.set(1, 1, 1);
+        }
+      });
+    }
+
+    function setupChunks() {
+      chunks.length = 0;
+      clearGroup(floorGroup);
+      for (let i = 0; i < visibleChunks; i++) buildChunk(i);
+    }
+
+    function resetChunks() {
+      chunks.forEach((chunk, i) => {
+        chunk.userData.index = i;
+        chunk.userData.worldZ = -i * chunkLength;
+        chunk.position.z = chunk.userData.worldZ;
+      });
+    }
+
+    function updateChunks() {
+      let farthest = 0;
+      for (const chunk of chunks) {
+        if (chunk.userData.worldZ < farthest) farthest = chunk.userData.worldZ;
+      }
+
+      chunks.forEach((chunk) => {
+        chunk.userData.worldZ += game.speed * dtGlobal;
+        if (chunk.userData.worldZ > chunkLength) {
+          chunk.userData.worldZ = farthest - chunkLength;
+          farthest = chunk.userData.worldZ;
+        }
+      
+        const melt = tweaks.melt;
+        chunk.position.z = chunk.userData.worldZ;
+        chunk.position.y = Math.sin(performance.now() * 0.0015 + chunk.userData.index) * melt * 0.35;
+        chunk.rotation.z = Math.sin(performance.now() * 0.001 + chunk.userData.index) * melt * 0.08;
+        chunk.scale.y = 1 + melt * 0.12;
+      });
+    }
+
+    function spawnFallbackRat() {
+      const body = new THREE.Mesh(
+        new THREE.BoxGeometry(1.4, 0.8, 2.4),
+        new THREE.MeshBasicMaterial({
+          color: 0xffffff,
+          wireframe: true
+        })
+      );
+      body.position.y = 0.4;
+
+      const head = new THREE.Mesh(
+        new THREE.BoxGeometry(0.8, 0.7, 0.8),
+        new THREE.MeshBasicMaterial({
+          color: 0xffffff,
+          wireframe: true
+        })
+      );
+      head.position.set(0, 0.62, 1.35);
+
+      const tail = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.03, 0.03, 1.9, 5),
+        new THREE.MeshBasicMaterial({
+          color: 0xffffff,
+          wireframe: true
+        })
+      );
+      tail.rotation.x = Math.PI / 2;
+      tail.position.set(0, 0.3, -1.8);
+
+      const rat = new THREE.Group();
+      rat.add(body, head, tail);
+      rat.scale.set(0.75, 0.75, 0.75);
+
+      ratPrototype = rat;
+      ratHolder.add(ratPrototype.clone());
+      ghostRat.add(ratPrototype.clone());
+    }
+
+    function loadRat() {
+      new OBJLoader().load(
+        "model_0.obj",
+        (obj) => {
+          const texLoader = new THREE.TextureLoader();
+          const tex = texLoader.load("rattex.png", (texture) => {
+            texture.magFilter = THREE.NearestFilter;
+            texture.minFilter = THREE.NearestFilter;
+            texture.generateMipmaps = false;
+            texture.colorSpace = THREE.SRGBColorSpace;
+          });
+    
+          obj.traverse((child) => {
+            if (child.isMesh) {
+              child.material = new THREE.MeshBasicMaterial({
+                color: 0xffffff,
+                side: THREE.DoubleSide,
+                transparent: true,
+                map: tex
+              });
+    
+              child.geometry.computeBoundingBox();
+              child.geometry.center();
+    
+              const box = new THREE.Box3().setFromObject(child);
+              const size = box.getSize(new THREE.Vector3());
+              const maxDim = Math.max(size.x, size.y, size.z) || 1;
+              const scale = 1 / maxDim;
+              child.scale.set(scale, scale, scale);
+            }
+          });
+    
+          ratPrototype = obj;
+          ratPrototype.scale.set(1.4, 1.4, 1.4);
+          clearGroup(ratHolder);
+          clearGroup(ghostRat);
+          ratHolder.add(ratPrototype.clone());
+          ghostRat.add(ratPrototype.clone());
+        },
+        undefined,
+        () => {
+          spawnFallbackRat();
+        }
+      );
+    }
+
+    function resetGame() {
+      game.started = false;
+      game.alive = true;
+      game.speed = 10;
+      game.targetSpeed = 10;
+      game.distance = 0;
+      game.laneIndex = 1;
+      game.targetLaneIndex = 1;
+      game.laneX = 0;
+      game.y = 0;
+      game.yVel = 0;
+      game.grounded = true;
+      game.sliding = false;
+      game.slideT = 0;
+      game.jumpCooldown = 0;
+      game.trauma = 0;
+      game.glitch = 0;
+      game.glitchTarget = 0;
+      game.warning = 0;
+      game.scoreFlash = 0;
+      game.schizoTimer = rand(1.8, 4.2);
+      game.ghostTimer = 0;
+      game.uiCorruptTimer = 0;
+      game.deadTimer = 0;
+
+      player.position.set(0, 0, 0);
+      player.rotation.set(0, 0, 0);
+      ghostRat.visible = false;
+
+      deathOverlay.classList.remove("visible");
+      controlsHint.classList.remove("hidden");
+      distanceValue.textContent = "0000";
+      warningMain.textContent = "rat";
+      warningSub.textContent = "keep moving";
+      centerWarning.classList.remove("visible");
+      glitchText.textContent = "rat rat rat";
+
+      resetChunks();
+      populateInitialObstacles();
+    }
+
+    function startRun() {
+      if (game.started) return;
+      game.started = true;
+      controlsHint.classList.add("hidden");
+    }
+
+    function triggerDeath() {
+      if (!game.alive) return;
+      game.alive = false;
+      game.deadTimer = 0;
+      game.trauma = Math.max(game.trauma, 1.2);
+      screenShakeTarget = 1.5;
+      deathScore.textContent = `distance // ${formatDistance(game.distance)}`;
+      setTimeout(() => {
+        deathOverlay.classList.add("visible");
+      }, 180);
+    }
+
+    function jump() {
+      if (!game.alive) return;
+      startRun();
+      if (!game.grounded || game.sliding) return;
+      game.grounded = false;
+      game.yVel = 8.8;
+      game.jumpCooldown = 0.12;
+      game.trauma = Math.max(game.trauma, 0.08);
+    }
+
+    function slide() {
+      if (!game.alive) return;
+      startRun();
+      if (!game.grounded) return;
+      game.sliding = true;
+      game.slideT = 0.72;
+      game.trauma = Math.max(game.trauma, 0.06);
+    }
+
+    function moveLane(dir) {
+      if (!game.alive) return;
+      startRun();
+      game.targetLaneIndex = THREE.MathUtils.clamp(
+        game.targetLaneIndex + dir,
+        0,
+        2
+      );
+    }
+
+    const sliderStates = [];
+    
+        document.querySelectorAll(".strange-slider").forEach((slider) => {
+          const min = parseFloat(slider.dataset.min);
+          const max = parseFloat(slider.dataset.max);
+          const key = slider.id.replace("slider-", "");
+          let targetVal = parseFloat(slider.dataset.val);
+          let currentVal = targetVal;
+          let dragging = false;
+    
+          const fill = slider.querySelector(".white-text-wrap");
+    
+          const updateUI = () => {
+            const percent = (currentVal - min) / (max - min);
+            fill.style.width = `${percent * 100}%`;
+          };
+    
+          const handleMove = (clientX) => {
+            const rect = slider.getBoundingClientRect();
+            const percent = THREE.MathUtils.clamp(
+              (clientX - rect.left) / rect.width,
+              0,
+              1
+            );
+            targetVal = min + percent * (max - min);
+            tweakTargets[key] = targetVal;
+          };
+    
+          slider.addEventListener("mousedown", (e) => {
+            dragging = true;
+            handleMove(e.clientX);
+          });
+    
+          window.addEventListener("mousemove", (e) => {
+            if (dragging) handleMove(e.clientX);
+          });
+    
+          window.addEventListener("mouseup", () => {
+            dragging = false;
+          });
+    
+          sliderStates.push({
+            update(dt) {
+              currentVal = expLerp(currentVal, targetVal, 15, dt);
+              updateUI();
+            }
+          });
+    
+          updateUI();
+        });
+    
+        const tweakUI = document.getElementById("tweak-ui");
+        const toggleUI = document.getElementById("toggle-ui");
+    
+        toggleUI.addEventListener("click", () => {
+          tweakUI.classList.toggle("collapsed");
+        });
+    
+
+    window.addEventListener("keydown", (e) => {
+      if (
+        ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " ", "a", "d", "w", "s", "A", "D", "W", "S"].includes(
+          e.key
+        )
+      ) {
+        e.preventDefault();
+      }
+
+      if (!keys.has(e.key)) {
+        if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") {
+          moveLane(-1);
+        }
+        if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") {
+          moveLane(1);
+        }
+        if (
+          e.key === "ArrowUp" ||
+          e.key === "w" ||
+          e.key === "W" ||
+          e.key === " "
+        ) {
+          jump();
+        }
+        if (e.key === "ArrowDown" || e.key === "s" || e.key === "S") {
+          slide();
+        }
+      }
+
+      keys.add(e.key);
+
+      if (!game.alive && e.key.toLowerCase() === "r") {
+        resetGame();
+      }
+    });
+
+	window.addEventListener("mousedown", (e) => {
+      if (draggingInsanity) return;
+    
+      const rect = canvas.getBoundingClientRect();
+      const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      const y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    
+      isHoldingRat = true;
+      isSquishing = true;
+      squishStart.set(e.clientX, e.clientY);
+      squishDrag.set(0, 0);
+    });
+
+    window.addEventListener("mousemove", (e) => {
+      if (isSquishing) {
+        squishDrag.set(
+          e.clientX - squishStart.x,
+          e.clientY - squishStart.y
+        );
+      }
+    });
+
+
+    window.addEventListener("mouseup", () => {
+      isHoldingRat = false;
+      isSquishing = false;
+      draggingInsanity = false;
+    });
+    
+
+    window.addEventListener("keyup", (e) => {
+      keys.delete(e.key);
+    });
+
+    restartBtn.addEventListener("click", () => {
+      resetGame();
+    });
+
+    function updatePlayer(dt) {
+      game.laneIndex = game.targetLaneIndex;
+      const laneTarget = laneXs[game.targetLaneIndex];
+      game.laneX = expLerp(game.laneX, laneTarget, 14, dt);
+
+      if (game.jumpCooldown > 0) game.jumpCooldown -= dt;
+
+      if (!game.grounded) {
+        game.yVel -= 20 * dt;
+        game.y += game.yVel * dt;
+        if (game.y <= 0) {
+          game.y = 0;
+          game.yVel = 0;
+          game.grounded = true;
+        }
+      }
+
+      if (game.sliding) {
+        game.slideT -= dt;
+        if (game.slideT <= 0) {
+          game.slideT = 0;
+          game.sliding = false;
+        }
+      }
+
+      player.position.x = game.laneX;
+      player.position.y = game.y;
+
+      const laneTilt = ((laneTarget - game.laneX) / 2.8) * 0.2;
+      const bob =
+        game.grounded && game.alive
+          ? Math.sin(performance.now() * 0.01 * Math.min(game.speed, 18)) * 0.05
+          : 0;
+
+      player.rotation.z = expLerp(player.rotation.z, laneTilt, 10, dt);
+      player.rotation.x = expLerp(
+        player.rotation.x,
+        game.sliding ? 0.8 : game.grounded ? 0.15 + bob : -0.35,
+        12,
+        dt
+      );
+
+      if (ratHolder.children[0]) {
+        const rat = ratHolder.children[0];
+        const targetScaleY = game.sliding ? 0.48 : game.grounded ? 1 : 0.92;
+        const targetScaleX = game.sliding ? 1.2 : game.grounded ? 1 : 1.05;
+        const targetScaleZ = game.sliding ? 1.15 : game.grounded ? 1 : 1.05;
+        rat.scale.x = expLerp(rat.scale.x, 1.4 * targetScaleX, 12, dt);
+        rat.scale.y = expLerp(rat.scale.y, 1.4 * targetScaleY, 12, dt);
+        rat.scale.z = expLerp(rat.scale.z, 1.4 * targetScaleZ, 12, dt);
+        rat.position.y = expLerp(
+          rat.position.y,
+          game.sliding ? -0.4 : 0,
+          14,
+          dt
+        );
+        rat.rotation.y += dt * 9;
+
+        const squishX = THREE.MathUtils.clamp(
+          1 + squishDrag.x * 0.004,
+          0.55,
+          2.3
+        );
+        const squishY = THREE.MathUtils.clamp(
+          1 - (Math.abs(squishDrag.x) + Math.abs(squishDrag.y)) * 0.0018,
+          0.35,
+          2.3
+        );
+        const squishZ = THREE.MathUtils.clamp(
+          1 - squishDrag.y * 0.0035,
+          0.55,
+          2.3
+        );
+        
+        if (!isSquishing) {
+          squishDrag.x = expLerp(squishDrag.x, 0, 8, dt);
+          squishDrag.y = expLerp(squishDrag.y, 0, 8, dt);
+        }
+        
+        rat.scale.x = expLerp(rat.scale.x, 1.4 * squishX, 12, dt);
+        rat.scale.y = expLerp(rat.scale.y, 1.4 * squishY, 12, dt);
+        rat.scale.z = expLerp(rat.scale.z, 1.4 * squishZ, 12, dt);
+
+        const liquid = tweaks.liquid;
+        const squishBase = 1.4;
+        rat.scale.x = expLerp(rat.scale.x, squishBase * squishX * (1 + liquid * 0.18), 12, dt);
+        rat.scale.y = expLerp(rat.scale.y, squishBase * squishY * (1 - liquid * 0.12), 12, dt);
+        rat.scale.z = expLerp(rat.scale.z, squishBase * squishZ * (1 + liquid * 0.12), 12, dt);
+        
+        
+      }
+    }
+
+    function updateObstacles(dt) {
+      let nearestDanger = 999;
+
+      obstaclePool.forEach((obstacle) => {
+        if (!obstacle.active) return;
+
+        obstacle.worldZ += game.speed * dt;
+        obstacle.mesh.position.z = obstacle.worldZ;
+
+        const pulse = Math.sin(performance.now() * 0.002 + obstacle.pulse) * 0.02;
+        obstacle.mesh.rotation.y += dt * 0.4;
+        obstacle.mesh.position.y = pulse;
+
+        const liquid = tweaks.liquid;
+        const melt = tweaks.melt;
+        
+        obstacle.mesh.rotation.z =
+          Math.sin(performance.now() * 0.002 + obstacle.pulse) * melt * 0.08;
+        
+        obstacle.mesh.scale.y = expLerp(
+          obstacle.mesh.scale.y,
+          1 + melt * 0.25 + liquid * 0.12,
+          6,
+          dt
+        );
+        
+        obstacle.mesh.scale.x = expLerp(
+          obstacle.mesh.scale.x,
+          1 + liquid * 0.08,
+          6,
+          dt
+        );
+        
+        obstacle.mesh.position.y +=
+          Math.sin(performance.now() * 0.003 + obstacle.pulse) * liquid * 0.08;
+
+        if (game.glitch > 0.45 && Math.random() < 0.08) {
+          obstacle.mesh.position.x =
+            laneXs[obstacle.lane] + (Math.random() - 0.5) * game.glitch * 0.18;
+        } else {
+          obstacle.mesh.position.x = expLerp(
+            obstacle.mesh.position.x,
+            laneXs[obstacle.lane],
+            18,
+            dt
+          );
+        }
+
+        const dz = obstacle.worldZ;
+        if (dz < nearestDanger && dz > -8) nearestDanger = dz;
+
+        if (
+          Math.abs(obstacle.mesh.position.x - game.laneX) < 1.1 &&
+          dz > -0.95 &&
+          dz < 0.75
+        ) {
+          if (obstacle.type === "block" || obstacle.type === "totem") {
+            if (game.y < 1.35) triggerDeath();
+          } else if (obstacle.type === "low") {
+            if (game.y < 0.45) triggerDeath();
+          } else if (obstacle.type === "bar") {
+            const slidingSafe = game.sliding || game.y > 1.7;
+            if (!slidingSafe) triggerDeath();
+          }
+        }
+      });
+
+      if (nearestDanger < 3.5) {
+        game.warning = 1;
+      } else {
+        game.warning = expLerp(game.warning, 0, 8, dt);
+      }
+
+      recycleFarObstacles();
+    }
+
+    function updateCamera(dt) {
+      const speedFactor = (game.speed - 10) / 14;
+      const traumaShake = game.trauma * game.trauma;
+
+      const camTarget = new THREE.Vector3(
+        game.laneX * 0.35,
+        3.3 + game.y * 0.22 + (game.sliding ? -0.3 : 0),
+        8.2 - speedFactor * 0.85
+      );
+
+      camera.position.x = expLerp(camera.position.x, camTarget.x, 9, dt);
+      camera.position.y = expLerp(camera.position.y, camTarget.y, 9, dt);
+      camera.position.z = expLerp(camera.position.z, camTarget.z, 9, dt);
+
+      camera.rotation.z = expLerp(
+        camera.rotation.z,
+        -(game.laneX - laneXs[1]) * 0.035 +
+          Math.sin(performance.now() * 0.015) * traumaShake * 0.02,
+        8,
+        dt
+      );
+
+      camera.fov = expLerp(
+        camera.fov,
+        68 + speedFactor * 14 + traumaShake * 2,
+        6,
+        dt
+      );
+      camera.updateProjectionMatrix();
+
+      const lookTarget = new THREE.Vector3(
+        game.laneX * 0.18,
+        1.2 + game.y * 0.15,
+        -8
+      );
+      camera.lookAt(lookTarget);
+
+      const shake = screenShake * screenShake;
+      const warp = tweaks.warp;
+      
+      camera.position.x +=
+        (Math.sin(performance.now() * 0.04) * 0.12 +
+          (Math.random() - 0.5) * 0.06) *
+        shake;
+      
+      camera.position.y +=
+        (Math.cos(performance.now() * 0.05) * 0.12 +
+          (Math.random() - 0.5) * 0.06) *
+        shake;
+      
+      camera.rotation.z +=
+        (Math.sin(performance.now() * 0.06) * 0.01 + warp * 0.025) * shake;
+      
+      camera.fov = expLerp(
+        camera.fov,
+        68 + speedFactor * 14 + traumaShake * 2 + warp * 10,
+        6,
+        dt
+      );
+      
+      camera.updateProjectionMatrix();
+
+      if (game.trauma > 0) game.trauma = Math.max(0, game.trauma - dt * 1.3);
+    }
+
+    function updateGhost(dt) {
+      game.ghostTimer -= dt;
+      if (game.ghostTimer <= 0) {
+        game.ghostTimer = rand(2.8, 5.8);
+        if (Math.random() < 0.75 && game.alive) {
+          ghostRat.visible = true;
+          ghostRat.position.set(
+            game.laneX + rand(-0.22, 0.22),
+            game.y + rand(-0.05, 0.1),
+            rand(-0.4, 0.4)
+          );
+          ghostRat.rotation.set(
+            player.rotation.x + rand(-0.2, 0.2),
+            rand(-0.4, 0.4),
+            player.rotation.z + rand(-0.15, 0.15)
+          );
+          ghostRat.traverse((child) => {
+            if (child.isMesh && child.material) {
+              child.material.opacity = 0.18;
+              child.material.transparent = true;
+            }
+          });
+          setTimeout(() => {
+            ghostRat.visible = false;
+          }, 90);
+        }
+      }
+    }
+
+    function updateSchizo(dt) {
+      game.schizoTimer -= dt;
+      if (game.schizoTimer <= 0) {
+        game.schizoTimer = rand(1.6, 4.8);
+        game.glitchTarget = rand(0.15, 0.95);
+        game.uiCorruptTimer = rand(0.15, 0.45);
+        game.scoreFlash = rand(0.2, 0.5);
+        if (Math.random() < 0.35) game.trauma = Math.max(game.trauma, 0.2);
+      }
+
+      game.glitchTarget = expLerp(game.glitchTarget, 0, 1.1, dt);
+      game.glitch = expLerp(game.glitch, game.glitchTarget, 8, dt);
+
+      game.glitchTarget = Math.max(game.glitchTarget, tweaks.insanity);
+      game.trauma = Math.max(game.trauma, tweaks.insanity * 0.12);
+      screenShakeTarget = Math.max(screenShakeTarget, tweaks.insanity * 0.5);
+
+      if (game.scoreFlash > 0) game.scoreFlash -= dt;
+      if (game.uiCorruptTimer > 0) game.uiCorruptTimer -= dt;
+
+      const messages = [
+        "rat rat rat",
+        "wrong lane",
+        "keep running",
+        "under the city",
+        "do not stop",
+        "not alone",
+        "track rat",
+        "home is ahead"
+      ];
+
+      if (game.uiCorruptTimer > 0) {
+        glitchText.textContent = pick(messages);
+        glitchText.style.opacity = "0.95";
+        glitchText.style.transform = `translate(${
+          (Math.random() - 0.5) * 6
+        }px, ${(Math.random() - 0.5) * 4}px)`;
+      } else {
+        glitchText.textContent = "rat rat rat";
+        glitchText.style.opacity = "0.55";
+        glitchText.style.transform = "translate(0, 0)";
+      }
+
+      if (game.glitch > 0.5) {
+        scene.fog.near = 10 + Math.sin(performance.now() * 0.01) * 1.2;
+        scene.fog.far = 65 + Math.sin(performance.now() * 0.008) * 6;
+      } else {
+        scene.fog.near = expLerp(scene.fog.near, 12, 6, dt);
+        scene.fog.far = expLerp(scene.fog.far, 75, 6, dt);
+      }
+
+      scene.scale.set(
+        1 + tweaks.warp * 0.04,
+        1 + tweaks.liquid * 0.03,
+        1
+      );
+      
+      scene.rotation.z = Math.sin(performance.now() * 0.0006) * tweaks.warp * 0.08;
+
+      screenShake = expLerp(screenShake, screenShakeTarget, 8, dt);
+      screenShakeTarget = expLerp(screenShakeTarget, 0, 3, dt);
+      
+    }
+
+    function updateHud() {
+      distanceValue.textContent =
+        game.scoreFlash > 0 && Math.random() < 0.35
+          ? "RAT?"
+          : formatDistance(game.distance);
+
+    }
+
+    let dtGlobal = 0;
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const dt = Math.min(clock.getDelta(), 0.033);
+
+	  for (const key of Object.keys(tweaks)) {
+	    tweaks[key] = expLerp(tweaks[key], tweakTargets[key], 5, dt);
+	  }
+
+	  sliderStates.forEach((slider) => slider.update(dt));
+	  
+      
+      dtGlobal = dt;
+
+      if (game.alive) {
+        if (game.started) {
+          game.targetSpeed += dt * 0.18;
+          game.targetSpeed = Math.min(game.targetSpeed, 24);
+          game.speed = expLerp(game.speed, game.targetSpeed, 2.6, dt);
+          game.distance += game.speed * dt * 1.7;
+        } else {
+          game.speed = expLerp(game.speed, 8.5, 4, dt);
+        }
+      } else {
+        game.deadTimer += dt;
+        game.speed = expLerp(game.speed, 0, 2.2, dt);
+      }
+
+      updateChunks();
+      updatePlayer(dt);
+      updateObstacles(dt);
+      updateCamera(dt);
+      updateGhost(dt);
+      updateSchizo(dt);
+      updateHud();
+
+      renderer.render(scene, camera);
+    }
+
+    window.addEventListener("resize", () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    setupChunks();
+    loadRat();
+    resetGame();
+    animate();
+  </script>
+</body>
+</html>

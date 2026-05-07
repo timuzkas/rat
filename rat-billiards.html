@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rat Billiards</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Averia+Serif+Libre:ital,wght@0,300;0,400;0,700;1,300;1,400;1,700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: #010101; font-family: "Averia Serif Libre", serif; color: #fff; }
+    #canvas { display: block; width: 100vw; height: 100vh; cursor: crosshair; }
+    
+    #status-layer {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 10;
+      border: 0px solid #fff;
+      transition: border 0.5s, box-shadow 0.5s;
+    }
+    
+    /* Tactile Turn Signals */
+    .turn-player #status-layer { border-left-width: 2px; }
+    .turn-cpu #status-layer { border-right-width: 2px; border-color: #f40; }
+    .turn-moving #status-layer { border-width: 0; }
+
+    #score-display {
+      position: fixed;
+      bottom: 40px;
+      left: 40px;
+      display: flex;
+      gap: 10px;
+      pointer-events: none;
+      z-index: 100;
+    }
+    .score-pip {
+      width: 6px;
+      height: 6px;
+      background: #111;
+      border: 1px solid #222;
+      border-radius: 50%;
+      transition: 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .score-pip.active {
+      background: #fff;
+      box-shadow: 0 0 15px rgba(255,255,255,0.4);
+      border-color: #fff;
+      transform: scale(1.2);
+    }
+
+    #instructions {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+      color: #333; font-size: 9px; letter-spacing: 0.5em; text-transform: uppercase;
+      pointer-events: none;
+    }
+
+    /* Polished Strange UI */
+    #ui-container {
+      position: fixed;
+      bottom: 40px;
+      right: 40px;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 20px;
+    }
+
+    #tweak-ui {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 15px;
+      transition: 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+      transform-origin: bottom right;
+    }
+    #tweak-ui.collapsed { transform: scale(0.9) translateY(20px); opacity: 0; pointer-events: none; }
+
+    #toggle-ui {
+      width: 45px; height: 45px; cursor: pointer; image-rendering: pixelated;
+      filter: grayscale(1) brightness(0.6); transition: 0.4s;
+    }
+    #toggle-ui:hover { filter: grayscale(0) brightness(1); transform: rotate(-10deg) scale(1.1); }
+
+    .strange-slider {
+      position: relative; cursor: ew-resize; user-select: none; height: 24px;
+      display: flex; align-items: center;
+    }
+    .slider-text { 
+      font-size: 13px; letter-spacing: 0.3em; text-transform: uppercase; 
+      line-height: 24px; color: #444; 
+    }
+    .white-text-wrap {
+      position: absolute; top: 0; left: 0; width: 0%; height: 100%;
+      overflow: hidden; border-right: 2px solid #fff; pointer-events: none;
+    }
+    .white-text { color: #fff; display: block; width: 300px; white-space: nowrap; }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <div id="status-layer"></div>
+  <div id="score-display"></div>
+  <div id="instructions">R to reset</div>
+
+  <div id="ui-container">
+    <div id="tweak-ui" class="collapsed">
+      <div class="strange-slider" id="slider-friction" data-min="0.95" data-max="0.999" data-val="0.98">
+        <div class="slider-text">Friction</div>
+        <div class="white-text-wrap"><div class="slider-text white-text">Friction</div></div>
+      </div>
+      <div class="strange-slider" id="slider-bounciness" data-min="0.5" data-max="1.2" data-val="0.8">
+        <div class="slider-text">Elasticity</div>
+        <div class="white-text-wrap"><div class="slider-text white-text">Elasticity</div></div>
+      </div>
+      <div class="strange-slider" id="slider-insanity" data-min="0" data-max="1" data-val="0">
+        <div class="slider-text">Unravel</div>
+        <div class="white-text-wrap"><div class="slider-text white-text">Unravel</div></div>
+      </div>
+    </div>
+    <img src="rat.png" id="toggle-ui" alt="rat">
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
+    import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+    import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+    import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
+
+    const TABLE_W = 30;
+    const TABLE_H = 18;
+    const RAT_RADIUS = 0.8;
+    const POCKET_RADIUS = 1.6;
+
+    const canvas = document.getElementById("canvas");
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x010101);
+
+    const aspect = window.innerWidth / window.innerHeight;
+    const viewH = 22;
+    const viewW = viewH * aspect;
+    const camera = new THREE.OrthographicCamera(-viewW/2, viewW/2, viewH/2, -viewH/2, 0.1, 100);
+    camera.position.z = 20;
+
+    // --- Lighting ---
+    scene.add(new THREE.AmbientLight(0xffffff, 1.5)); // Brighter overall "sunlight"
+
+    // --- Table ---
+    const tableGeom = new THREE.PlaneGeometry(TABLE_W + 2, TABLE_H + 2);
+    const tableMat = new THREE.MeshStandardMaterial({ 
+      color: 0x121212, // Slightly darker for better contrast
+      roughness: 0.9, 
+      metalness: 0.05 
+    });
+    const tableMesh = new THREE.Mesh(tableGeom, tableMat);
+    tableMesh.position.z = -0.15;
+    scene.add(tableMesh);
+
+    let border = new THREE.LineSegments(
+      new THREE.EdgesGeometry(new THREE.BoxGeometry(TABLE_W, TABLE_H, 0.1)),
+      new THREE.LineBasicMaterial({ color: 0x333333 }) // Subtler border
+    );
+    scene.add(border);
+
+    // Pockets
+    const pockets = [
+      { x: -TABLE_W/2, y: -TABLE_H/2 }, { x: 0, y: -TABLE_H/2 }, { x: TABLE_W/2, y: -TABLE_H/2 },
+      { x: -TABLE_W/2, y: TABLE_H/2 }, { x: 0, y: TABLE_H/2 }, { x: TABLE_W/2, y: TABLE_H/2 }
+    ];
+    const pocketGeom = new THREE.CircleGeometry(POCKET_RADIUS, 32);
+    const pocketMat = new THREE.MeshBasicMaterial({ color: 0x020202 });
+
+    pockets.forEach(p => {
+      const mesh = new THREE.Mesh(pocketGeom, pocketMat);
+      mesh.position.set(p.x, p.y, -0.05);
+      scene.add(mesh);
+
+      // Much subtler rim for pockets
+      const rim = new THREE.Mesh(new THREE.RingGeometry(POCKET_RADIUS, POCKET_RADIUS + 0.1, 32), new THREE.MeshBasicMaterial({ color: 0x111111 }));
+      rim.position.set(p.x, p.y, -0.04);
+      scene.add(rim);
+    });
+
+    // --- Turn State ---
+    const TURN_PLAYER = 'player';
+    const TURN_CPU = 'cpu';
+    const TURN_MOVING = 'moving';
+    let turnState = TURN_PLAYER;
+
+    // --- Indicators ---
+    const scoreDisplay = document.getElementById('score-display');
+    const TOTAL_PIPS = 15;
+    for(let i=0; i<TOTAL_PIPS; i++) {
+      const pip = document.createElement('div');
+      pip.className = 'score-pip';
+      scoreDisplay.appendChild(pip);
+    }
+
+    function updateScoreUI() {
+      const pips = scoreDisplay.querySelectorAll('.score-pip');
+      pips.forEach((p, i) => {
+        if (i < score) p.classList.add('active');
+        else p.classList.remove('active');
+      });
+    }
+
+    // --- Shaders ---
+    const composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+
+    const HallucinationShader = {
+      uniforms: {
+        "tDiffuse": { value: null },
+        "time": { value: 0.0 },
+        "intensity": { value: 0.0 }
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform sampler2D tDiffuse;
+        uniform float time;
+        uniform float intensity;
+        varying vec2 vUv;
+
+        void main() {
+          vec2 uv = vUv;
+          vec4 finalCol;
+          if (intensity > 0.05) {
+            // Kaleidoscope
+            float sides = floor(2.0 + intensity * 6.0);
+            vec2 p = uv - 0.5;
+            float r = length(p);
+            float a = atan(p.y, p.x) + time * intensity * 0.1;
+            float tau = 6.283185;
+            a = mod(a, tau/sides);
+            a = abs(a - tau/sides/2.0);
+            p = r * vec2(cos(a), sin(a));
+            uv = p + 0.5;
+            
+            // Safety clamp to prevent disappearing pixels at edges
+            uv = clamp(uv, 0.0, 1.0);
+            
+            // Chromatic aberration
+            float shift = 0.01 * intensity * sin(time);
+            vec4 rCol = texture2D(tDiffuse, uv + vec2(shift, 0.0));
+            vec4 gCol = texture2D(tDiffuse, uv);
+            vec4 bCol = texture2D(tDiffuse, uv - vec2(shift, 0.0));
+            finalCol = vec4(rCol.r, gCol.g, bCol.b, 1.0);
+            
+            // Soft blend with original to prevent total disappearance
+            vec4 orig = texture2D(tDiffuse, vUv);
+            finalCol = mix(orig, finalCol, 0.7);
+            
+            // Brightness boost to counter darkening
+            finalCol.rgb += intensity * 0.15;
+          } else {
+            finalCol = texture2D(tDiffuse, uv);
+          }
+          gl_FragColor = finalCol;
+        }
+      `
+    };
+    const halluPass = new ShaderPass(HallucinationShader);
+    composer.addPass(halluPass);
+
+    let ratModel = null;
+    let ratTex = null;
+    let rats = [];
+    let cueRat = null;
+    let score = 0;
+    let screenShake = 0;
+
+    let params = { friction: 0.98, bounciness: 0.8, insanity: 0 };
+
+    new THREE.TextureLoader().load('rattex.png', (tex) => {
+      tex.magFilter = THREE.NearestFilter;
+      tex.minFilter = THREE.NearestFilter;
+      ratTex = tex;
+      new OBJLoader().load('model_0.obj', (obj) => {
+        obj.traverse(child => {
+          if (child.isMesh) {
+            child.material = new THREE.MeshStandardMaterial({ map: ratTex, metalness: 0.1, roughness: 0.8 });
+            child.geometry.center();
+            child.geometry.computeBoundingBox();
+            const size = child.geometry.boundingBox.getSize(new THREE.Vector3());
+            const scale = (RAT_RADIUS * 2) / Math.max(size.x, size.y, size.z);
+            child.scale.set(scale, scale, scale);
+          }
+        });
+        ratModel = obj;
+        ratModel.rotation.y = Math.PI / 2;
+        resetTable();
+      });
+    });
+
+    class BilliardRat {
+      constructor(x, y, isCue = false) {
+        this.pos = new THREE.Vector3(x, y, 0);
+        this.vel = new THREE.Vector3(0, 0, 0);
+        this.isCue = isCue;
+        this.mesh = ratModel.clone();
+        this.roll = 0;
+        this.squish = 0;
+        this.baseScale = this.mesh.scale.x;
+        if (isCue) {
+          this.mesh.traverse(c => {
+            if (c.isMesh) {
+              c.material = c.material.clone();
+              c.material.emissive.set(0x666666); // Brighter cue rat
+            }
+          });
+        } else {
+           this.mesh.traverse(c => {
+             if (c.isMesh) {
+               c.material = c.material.clone();
+               c.material.color.setHSL(Math.random(), 0.6, 0.6); // More vibrant
+               c.material.emissive.set(0x333333); // Glowy bodies
+             }
+           });
+        }
+        scene.add(this.mesh);
+        this.ghosts = [];
+      }
+
+      update(dt, time) {
+        const prevPos = this.pos.clone();
+        this.pos.add(this.vel.clone().multiplyScalar(dt * 60));
+        this.vel.multiplyScalar(params.friction);
+        if (this.vel.length() < 0.001) this.vel.set(0,0,0);
+
+        // Rolling logic
+        const distMoved = this.pos.distanceTo(prevPos);
+        this.roll += distMoved * 1.5;
+
+        // Squish decay
+        this.squish *= 0.9;
+
+        // Sleep Deprivation hallucinations: Teleporting
+        if (params.insanity > 0.6 && Math.random() < params.insanity * 0.01) {
+          this.pos.x += (Math.random() - 0.5) * 2 * params.insanity;
+          this.pos.y += (Math.random() - 0.5) * 2 * params.insanity;
+        }
+
+        // Wall collisions
+        const halfW = TABLE_W / 2 - RAT_RADIUS;
+        const halfH = TABLE_H / 2 - RAT_RADIUS;
+
+        if (this.pos.x > halfW) { this.pos.x = halfW; this.vel.x *= -params.bounciness; this.squish = 0.4; }
+        if (this.pos.x < -halfW) { this.pos.x = -halfW; this.vel.x *= -params.bounciness; this.squish = 0.4; }
+        if (this.pos.y > halfH) { this.pos.y = halfH; this.vel.y *= -params.bounciness; this.squish = 0.4; }
+        if (this.pos.y < -halfH) { this.pos.y = -halfH; this.vel.y *= -params.bounciness; this.squish = 0.4; }
+
+        this.mesh.position.set(this.pos.x, this.pos.y, 0);
+        
+        // Use a group or nested rotation for clean roll + yaw
+        if (this.vel.length() > 0.01) {
+          this.mesh.rotation.z = Math.atan2(this.vel.y, this.vel.x) - Math.PI/2;
+        }
+        
+        // Apply roll (around local X)
+        this.mesh.traverse(c => {
+          if (c.isMesh) {
+            c.rotation.x = this.roll;
+            // Apply squish
+            c.scale.set(1 - this.squish, 1 + this.squish, 1);
+          }
+        });
+        
+        // Hallucination ghosts
+        if (params.insanity > 0.4) {
+          this.updateGhosts(time);
+        } else {
+          this.ghosts.forEach(g => { scene.remove(g); });
+          this.ghosts = [];
+        }
+      }
+
+      updateGhosts(time) {
+        const ghostCount = Math.floor(params.insanity * 3);
+        while (this.ghosts.length < ghostCount) {
+          const g = this.mesh.clone();
+          g.traverse(c => { if(c.isMesh) { c.material = c.material.clone(); c.material.transparent = true; c.material.opacity = 0.3; } });
+          scene.add(g);
+          this.ghosts.push(g);
+        }
+        while (this.ghosts.length > ghostCount) {
+          scene.remove(this.ghosts.pop());
+        }
+        this.ghosts.forEach((g, i) => {
+          const offset = (i + 1) * params.insanity * 0.5;
+          g.position.set(
+            this.pos.x + Math.sin(time * 5 + i) * offset,
+            this.pos.y + Math.cos(time * 5 + i) * offset,
+            -0.1
+          );
+          g.rotation.z = this.mesh.rotation.z;
+        });
+      }
+    }
+
+    function resetTable() {
+      rats.forEach(r => { scene.remove(r.mesh); r.ghosts.forEach(g => scene.remove(g)); });
+      rats = [];
+      
+      cueRat = new BilliardRat(8, 0, true);
+      rats.push(cueRat);
+
+      const startX = -6;
+      const spacing = RAT_RADIUS * 2.1;
+      for (let i = 0; i < 5; i++) {
+        for (let j = 0; j <= i; j++) {
+          rats.push(new BilliardRat(startX - i * spacing * 0.86, (j - i / 2) * spacing));
+        }
+      }
+    }
+
+    function handleCollisions() {
+      for (let i = 0; i < rats.length; i++) {
+        for (let j = i + 1; j < rats.length; j++) {
+          const r1 = rats[i];
+          const r2 = rats[j];
+          const dist = r1.pos.distanceTo(r2.pos);
+          const minDist = RAT_RADIUS * 2;
+
+          if (dist < minDist) {
+            const normal = r1.pos.clone().sub(r2.pos).normalize();
+            const relativeVel = r1.vel.clone().sub(r2.vel);
+            const velocityAlongNormal = relativeVel.dot(normal);
+
+            if (velocityAlongNormal < 0) {
+              const j_impulse = -(1 + params.bounciness) * velocityAlongNormal;
+              const impulse = normal.multiplyScalar(j_impulse / 2);
+              r1.vel.add(impulse);
+              r2.vel.sub(impulse);
+              const overlap = minDist - dist;
+              const correction = normal.clone().multiplyScalar(overlap / 2);
+              r1.pos.add(correction);
+              r2.pos.sub(correction);
+              
+              r1.squish = Math.min(0.5, r1.squish + 0.2);
+              r2.squish = Math.min(0.5, r2.squish + 0.2);
+            }
+          }
+        }
+      }
+    }
+
+    // --- Whip ---
+    const whipPoints = 20;
+    const whipLineGeom = new THREE.BufferGeometry().setFromPoints(new Array(whipPoints).fill(new THREE.Vector3()));
+    const whipLine = new THREE.Line(whipLineGeom, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8 }));
+    scene.add(whipLine);
+
+    let mousePos = new THREE.Vector3();
+    let prevMousePos = new THREE.Vector3();
+    let whipHistory = new Array(whipPoints).fill(0).map(() => new THREE.Vector3());
+
+    function updateWhip(dt, time) {
+      whipHistory[0].copy(mousePos);
+      
+      const segmentLen = 0.4;
+      for (let i = 1; i < whipPoints; i++) {
+        const prev = whipHistory[i-1];
+        const curr = whipHistory[i];
+        const diff = curr.clone().sub(prev);
+        if (diff.length() > segmentLen) {
+          curr.copy(prev.clone().add(diff.normalize().multiplyScalar(segmentLen)));
+        }
+      }
+      
+      const positions = whipLine.geometry.attributes.position.array;
+      for (let i = 0; i < whipPoints; i++) {
+        let p = whipHistory[i];
+        positions[i * 3] = p.x;
+        positions[i * 3 + 1] = p.y;
+        positions[i * 3 + 2] = 0.1;
+      }
+      whipLine.geometry.attributes.position.needsUpdate = true;
+
+      if (cueRat && turnState === TURN_PLAYER) {
+        const whipTail = whipHistory[whipPoints - 1];
+        const prevWhipTail = whipHistory[whipPoints - 2] || whipTail;
+        const tailVel = whipTail.clone().sub(prevWhipTail).divideScalar(dt || 0.016);
+        
+        if (tailVel.length() > 15) {
+           const dist = whipTail.distanceTo(cueRat.pos);
+           if (dist < RAT_RADIUS * 1.5) {
+             cueRat.vel.add(tailVel.multiplyScalar(0.008));
+             turnState = TURN_MOVING;
+           }
+        }
+      }
+      prevMousePos.copy(mousePos);
+    }
+
+    function checkPockets() {
+      for (let i = rats.length - 1; i >= 0; i--) {
+        const r = rats[i];
+        for (const p of pockets) {
+          const d = r.pos.distanceTo(new THREE.Vector3(p.x, p.y, 0));
+          if (d < POCKET_RADIUS) {
+            if (r.isCue) {
+              r.pos.set(8, 0, 0);
+              r.vel.set(0, 0, 0);
+            } else {
+              scene.remove(r.mesh);
+              r.ghosts.forEach(g => scene.remove(g));
+              rats.splice(i, 1);
+              score++;
+              screenShake = 0.5;
+              updateScoreUI();
+            }
+            break;
+          }
+        }
+      }
+    }
+
+    const mouse = new THREE.Vector2();
+    window.addEventListener('mousemove', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      mousePos.set(mouse.x * (viewW / 2), mouse.y * (viewH / 2), 0);
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key.toLowerCase() === 'r') {
+        score = 0;
+        updateScoreUI();
+        resetTable();
+      }
+    });
+
+    const sliders = document.querySelectorAll('.strange-slider');
+    const sliderStates = [];
+    sliders.forEach(slider => {
+      const min = parseFloat(slider.dataset.min);
+      const max = parseFloat(slider.dataset.max);
+      let targetVal = parseFloat(slider.dataset.val);
+      let currentVal = targetVal;
+      let dragging = false;
+      const fill = slider.querySelector('.white-text-wrap');
+      const updateUI = () => { fill.style.width = ((currentVal - min) / (max - min) * 100) + '%'; };
+      const handleMove = (clientX) => {
+        const rect = slider.getBoundingClientRect();
+        targetVal = min + Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) * (max - min);
+      };
+      slider.addEventListener('mousedown', (e) => { dragging = true; handleMove(e.clientX); });
+      window.addEventListener('mousemove', (e) => { if (dragging) handleMove(e.clientX); });
+      window.addEventListener('mouseup', () => dragging = false);
+      sliderStates.push({ update: (dt) => {
+        currentVal += (targetVal - currentVal) * (1 - Math.exp(-15 * dt));
+        updateUI(); return currentVal;
+      }});
+    });
+
+    const tweakUI = document.getElementById('tweak-ui');
+    document.getElementById('toggle-ui').onclick = () => tweakUI.classList.toggle('collapsed');
+
+    const clock = new THREE.Clock();
+    let cpuShootTimer = 0;
+    let lastShooter = TURN_CPU;
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = Math.min(clock.getDelta(), 0.1);
+      const time = clock.getElapsedTime();
+      
+      params.friction = sliderStates[0].update(dt);
+      params.bounciness = sliderStates[1].update(dt);
+      params.insanity = sliderStates[2].update(dt);
+
+      halluPass.uniforms.intensity.value = params.insanity;
+      halluPass.uniforms.time.value = time;
+
+      if (ratModel) {
+        updateWhip(dt, time);
+        handleCollisions();
+        checkPockets();
+        rats.forEach(r => r.update(dt, time));
+
+        // Screen Shake
+        if (screenShake > 0.01) {
+          camera.position.x = (Math.random() - 0.5) * screenShake;
+          camera.position.y = (Math.random() - 0.5) * screenShake;
+          screenShake *= 0.9;
+        } else {
+          camera.position.x = 0;
+          camera.position.y = 0;
+        }
+        
+        // Hallucination: Table warping
+        if (params.insanity > 0.2) {
+          const s = 1 + Math.sin(time * 2) * params.insanity * 0.05;
+          border.scale.set(s, 1/s, 1);
+        } else {
+          border.scale.set(1, 1, 1);
+        }
+
+        // Turn Management
+        let allStopped = rats.every(r => r.vel.length() < 0.005);
+        
+        if (allStopped) {
+          if (turnState === TURN_MOVING) {
+            turnState = (lastShooter === TURN_PLAYER) ? TURN_CPU : TURN_PLAYER;
+            cpuShootTimer = 0;
+          }
+          
+          if (turnState === TURN_PLAYER) {
+            document.body.className = "turn-player";
+            lastShooter = TURN_PLAYER;
+          } else if (turnState === TURN_CPU) {
+            document.body.className = "turn-cpu";
+            lastShooter = TURN_CPU;
+
+            cpuShootTimer += dt;
+            if (cpuShootTimer > 1.5 && rats.length > 1) {
+              const target = rats[1 + Math.floor(Math.random() * (rats.length - 1))];
+              const pocket = pockets[Math.floor(Math.random() * pockets.length)];
+              const dirToPocket = new THREE.Vector3(pocket.x, pocket.y, 0).sub(target.pos).normalize();
+              const hitPoint = target.pos.clone().sub(dirToPocket.multiplyScalar(RAT_RADIUS * 2));
+              const aimDir = hitPoint.sub(cueRat.pos).normalize();
+              cueRat.vel.copy(aimDir.multiplyScalar(0.4 + Math.random() * 0.4));
+              turnState = TURN_MOVING;
+              cpuShootTimer = 0;
+            }
+          }
+        } else {
+          document.body.className = "turn-moving";
+          if (turnState !== TURN_MOVING) turnState = TURN_MOVING;
+        }
+      }
+
+      composer.render();
+    }
+    
+    window.addEventListener('resize', () => {
+      const aspect = window.innerWidth / window.innerHeight;
+      camera.left = -(viewH * aspect) / 2;
+      camera.right = (viewH * aspect) / 2;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      composer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    animate();
+  </script>
+</body>
+</html>

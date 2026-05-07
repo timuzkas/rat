@@ -1,0 +1,1781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  />
+  <title>Rat Life</title>
+  <link
+    rel="preconnect"
+    href="https://fonts.googleapis.com"
+  />
+  <link
+    rel="preconnect"
+    href="https://fonts.gstatic.com"
+    crossorigin
+  />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Averia+Serif+Libre:ital,wght@0,300;0,400;0,700;1,300;1,400;1,700&display=swap"
+    rel="stylesheet"
+  />
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      overflow: hidden;
+      background: #000;
+      font-family: "Averia Serif Libre", serif;
+      color: #eee;
+    }
+
+    #canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      cursor: crosshair;
+    }
+
+    #ui-container {
+      position: fixed;
+      bottom: 40px;
+      right: 40px;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 20px;
+    }
+
+    #tweak-ui {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 15px;
+      transition:
+        opacity 0.5s ease,
+        transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+      transform-origin: bottom right;
+      pointer-events: auto;
+      max-height: calc(100vh - 140px);
+      overflow-y: auto;
+      padding-right: 6px;
+    }
+
+    #tweak-ui::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    #tweak-ui::-webkit-scrollbar-thumb {
+      background: #222;
+    }
+
+    #tweak-ui.collapsed {
+      transform: scale(0.8) translateY(20px);
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #toggle-ui {
+      width: 60px;
+      height: 60px;
+      cursor: pointer;
+      image-rendering: pixelated;
+      filter: grayscale(1) brightness(0.6);
+      transition:
+        filter 0.3s ease,
+        transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    #toggle-ui:hover {
+      filter: grayscale(0) brightness(1);
+      transform: scale(1.1) rotate(5deg);
+    }
+
+    .strange-slider {
+      position: relative;
+      cursor: ew-resize;
+      user-select: none;
+      height: 30px;
+      display: inline-block;
+      white-space: nowrap;
+    }
+
+    .slider-text {
+      font-size: 16px;
+      font-weight: 400;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      line-height: 30px;
+    }
+
+    .gray-text {
+      color: #262626;
+    }
+
+    .white-text-wrap {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 0%;
+      height: 100%;
+      overflow: hidden;
+      border-right: 1px solid #fff;
+      pointer-events: none;
+    }
+
+    .white-text {
+      color: #fff;
+      display: block;
+      width: 400px;
+    }
+
+    .strange-checkbox {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+      user-select: none;
+      padding: 5px 0;
+    }
+
+    .checkbox-box {
+      width: 18px;
+      height: 18px;
+      border: 1px solid #444;
+      position: relative;
+      transition: border-color 0.3s ease;
+    }
+
+    .strange-checkbox:hover .checkbox-box {
+      border-color: #eee;
+    }
+
+    .checkbox-box::after {
+      content: "";
+      position: absolute;
+      inset: 3px;
+      background: #eee;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+
+    .strange-checkbox.checked .checkbox-box::after {
+      opacity: 1;
+    }
+
+    .checkbox-label {
+      font-size: 14px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: #aaa;
+      transition: color 0.3s ease;
+    }
+
+    .strange-checkbox.checked .checkbox-label {
+      color: #eee;
+    }
+
+    #stats {
+      position: fixed;
+      bottom: 40px;
+      left: 40px;
+      color: #555;
+      font-size: 12px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      pointer-events: none;
+      line-height: 1.6;
+    }
+
+    #overlay {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 50;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <div id="overlay"></div>
+
+  <div id="stats">
+    Population: <span id="pop-count">0</span><br />
+    Generation: <span id="gen-count">0</span><br />
+    Colonies: <span id="colony-count">0</span>
+  </div>
+
+  <div id="ui-container">
+    <div
+      id="tweak-ui"
+      class="collapsed"
+    >
+      <div
+        class="strange-slider"
+        id="slider-speed"
+        data-min="0.1"
+        data-max="5"
+        data-val="1"
+      >
+        <div class="slider-text gray-text">Simulation Speed</div>
+        <div class="white-text-wrap">
+          <div class="slider-text white-text">Simulation Speed</div>
+        </div>
+      </div>
+
+      <div
+        class="strange-slider"
+        id="slider-mutation"
+        data-min="0"
+        data-max="1"
+        data-val="0.1"
+      >
+        <div class="slider-text gray-text">Mutation Rate</div>
+        <div class="white-text-wrap">
+          <div class="slider-text white-text">Mutation Rate</div>
+        </div>
+      </div>
+
+      <div
+        class="strange-slider"
+        id="slider-food"
+        data-min="5"
+        data-max="100"
+        data-val="30"
+      >
+        <div class="slider-text gray-text">Food Density</div>
+        <div class="white-text-wrap">
+          <div class="slider-text white-text">Food Density</div>
+        </div>
+      </div>
+
+      <div
+        class="strange-slider"
+        id="slider-insanity"
+        data-min="0"
+        data-max="1"
+        data-val="0"
+      >
+        <div class="slider-text gray-text">euuughh</div>
+        <div class="white-text-wrap">
+          <div class="slider-text white-text">euuughh</div>
+        </div>
+      </div>
+
+      <div
+        class="strange-slider"
+        id="slider-reproduction"
+        data-min="40"
+        data-max="120"
+        data-val="80"
+      >
+        <div class="slider-text gray-text">Reproduction Threshold</div>
+        <div class="white-text-wrap">
+          <div class="slider-text white-text">Reproduction Threshold</div>
+        </div>
+      </div>
+
+      <div
+        class="strange-slider"
+        id="slider-food-nutrition"
+        data-min="10"
+        data-max="60"
+        data-val="35"
+      >
+        <div class="slider-text gray-text">Food Nutrition</div>
+        <div class="white-text-wrap">
+          <div class="slider-text white-text">Food Nutrition</div>
+        </div>
+      </div>
+
+      <div
+        class="strange-slider"
+        id="slider-predator-frequency"
+        data-min="3"
+        data-max="20"
+        data-val="10"
+      >
+        <div class="slider-text gray-text">Predator Frequency</div>
+        <div class="white-text-wrap">
+          <div class="slider-text white-text">Predator Frequency</div>
+        </div>
+      </div>
+
+      <div
+        class="strange-slider"
+        id="slider-predator-radius"
+        data-min="2"
+        data-max="12"
+        data-val="6"
+      >
+        <div class="slider-text gray-text">Predator Radius</div>
+        <div class="white-text-wrap">
+          <div class="slider-text white-text">Predator Radius</div>
+        </div>
+      </div>
+
+      <div
+        class="strange-slider"
+        id="slider-cannibalism-threshold"
+        data-min="0"
+        data-max="1"
+        data-val="0.4"
+      >
+        <div class="slider-text gray-text">Cannibalism Threshold</div>
+        <div class="white-text-wrap">
+          <div class="slider-text white-text">Cannibalism Threshold</div>
+        </div>
+      </div>
+
+      <div
+        class="strange-slider"
+        id="slider-world-size"
+        data-min="20"
+        data-max="80"
+        data-val="40"
+      >
+        <div class="slider-text gray-text">World Size</div>
+        <div class="white-text-wrap">
+          <div class="slider-text white-text">World Size</div>
+        </div>
+      </div>
+
+      <div
+        class="strange-checkbox checked"
+        id="check-predator"
+      >
+        <div class="checkbox-box"></div>
+        <div class="checkbox-label">The Great Fist</div>
+      </div>
+
+      <div
+        class="strange-checkbox"
+        id="check-building"
+      >
+        <div class="checkbox-box"></div>
+        <div class="checkbox-label">Allow Building</div>
+      </div>
+    </div>
+    <img
+      src="rat.png"
+      id="toggle-ui"
+      alt="rat"
+    />
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
+    import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+    import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+    import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+    import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
+
+    const BASE_WORLD_SIZE = 40;
+    const FOOD_LIFESPAN = 15;
+    const RAT_ENERGY_MAX = 100;
+    const RAT_REPRODUCE_COST = 50;
+    const RAT_START_ENERGY = 40;
+
+    const canvas = document.getElementById("canvas");
+    const overlay = document.getElementById("overlay");
+    const renderer = new THREE.WebGLRenderer({
+      canvas,
+      antialias: true
+    });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+    const scene = new THREE.Scene();
+    let gridHelper = new THREE.GridHelper(
+      BASE_WORLD_SIZE * 2,
+      20,
+      0x303030,
+      0x1a1a1a
+    );
+    scene.add(gridHelper);
+
+    let groundPlane = new THREE.Mesh(
+      new THREE.PlaneGeometry(BASE_WORLD_SIZE * 2.4, BASE_WORLD_SIZE * 2.4),
+      new THREE.MeshStandardMaterial({
+        color: 0x161616,
+        metalness: 0,
+        roughness: 1
+      })
+    );
+    groundPlane.rotation.x = -Math.PI / 2;
+    groundPlane.position.y = -0.02;
+    scene.add(groundPlane);
+    
+
+    const camera = new THREE.PerspectiveCamera(
+      60,
+      window.innerWidth / window.innerHeight,
+      0.1,
+      1000
+    );
+    camera.position.set(30, 30, 30);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.enableZoom = false;
+
+    const composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+
+    const MeltShader = {
+      uniforms: {
+        tDiffuse: { value: null },
+        time: { value: 0.0 },
+        intensity: { value: 0.0 }
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix *
+            vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform sampler2D tDiffuse;
+        uniform float time;
+        uniform float intensity;
+        varying vec2 vUv;
+
+        float hash(float n) { return fract(sin(n) * 43758.5453123); }
+
+        void main() {
+          vec2 uv = vUv;
+
+          if (intensity > 0.01) {
+            float drip = sin(uv.x * 20.0 +
+              hash(floor(uv.x * 50.0))) * 0.1 * intensity;
+            uv.y += drip * sin(time * 0.5);
+
+            if (hash(time) > 0.95 - (intensity * 0.1)) {
+              uv.x += (hash(uv.y * 10.0 + time) - 0.5) *
+                0.05 * intensity;
+            }
+
+            float shift = 0.02 * intensity;
+            vec4 rCol = texture2D(tDiffuse, uv + vec2(shift, 0.0));
+            vec4 gCol = texture2D(tDiffuse, uv);
+            vec4 bCol = texture2D(tDiffuse, uv - vec2(shift, 0.0));
+
+            gl_FragColor = vec4(rCol.r, gCol.g, bCol.b, 1.0);
+          } else {
+            gl_FragColor = texture2D(tDiffuse, uv);
+          }
+        }
+      `
+    };
+
+    const meltPass = new ShaderPass(MeltShader);
+    composer.addPass(meltPass);
+
+    let targetDistance = camera.position.length();
+
+    canvas.addEventListener(
+      "wheel",
+      (e) => {
+        e.preventDefault();
+        const zoomAmount = e.deltaY * 0.001;
+        targetDistance += zoomAmount * (targetDistance * 0.5);
+        targetDistance = Math.max(5, Math.min(500, targetDistance));
+      },
+      { passive: false }
+    );
+
+    const ambientLight = new THREE.AmbientLight(0xffffff, 3.25);
+    scene.add(ambientLight);
+
+    const hemiLight = new THREE.HemisphereLight(
+      0xffffff,
+      0x666666,
+      1.45
+    );
+    scene.add(hemiLight);
+
+    let ratModel = null;
+    let ratTex = null;
+    let cheeseModel = null;
+
+    const loader = new OBJLoader();
+    const texLoader = new THREE.TextureLoader();
+
+    texLoader.load("rattex.png", (tex) => {
+      tex.magFilter = THREE.NearestFilter;
+      tex.minFilter = THREE.NearestFilter;
+      ratTex = tex;
+      loader.load("model_0.obj", (obj) => {
+        obj.traverse((child) => {
+          if (child.isMesh) {
+            child.material = new THREE.MeshStandardMaterial({
+              map: ratTex,
+              metalness: 0.05,
+              roughness: 0.75
+            });
+            child.geometry.computeBoundingBox();
+            child.geometry.center();
+            const box = new THREE.Box3().setFromObject(child);
+            const size = box.getSize(new THREE.Vector3());
+            const maxDim = Math.max(size.x, size.y, size.z) || 1;
+            child.scale.set(1 / maxDim, 1 / maxDim, 1 / maxDim);
+          }
+        });
+        ratModel = obj;
+        initSimulation();
+      });
+    });
+
+    const cheeseGeom = new THREE.ConeGeometry(0.3, 0.5, 4);
+    const cheeseMat = new THREE.MeshStandardMaterial({
+      color: 0xffdd33,
+      metalness: 0.15,
+      roughness: 0.45,
+      emissive: 0x332200,
+      emissiveIntensity: 0.15
+    });
+    cheeseModel = new THREE.Mesh(cheeseGeom, cheeseMat);
+
+    let params = {
+      speed: 1.0,
+      mutation: 0.1,
+      foodDensity: 30,
+      insanity: 0,
+      reproductionThreshold: 80,
+      foodNutrition: 35,
+      predatorFrequency: 10,
+      predatorRadius: 6,
+      cannibalismThreshold: 0.4,
+      worldSize: 40,
+      allowBuilding: false
+    };
+
+    let rats = [];
+    let food = [];
+    let colonies = [];
+    let digSites = [];
+    let generationCount = 0;
+    let worldSizeCurrent = params.worldSize;
+
+    const ratGroup = new THREE.Group();
+    const foodGroup = new THREE.Group();
+    const colonyGroup = new THREE.Group();
+    const digGroup = new THREE.Group();
+    scene.add(ratGroup, foodGroup, colonyGroup, digGroup);
+
+    function getWorldSize() {
+      return params.worldSize;
+    }
+
+    function rebuildGrid() {
+      scene.remove(gridHelper);
+      scene.remove(groundPlane);
+    
+      const divisions = Math.max(10, Math.round(getWorldSize() / 2));
+    
+      gridHelper = new THREE.GridHelper(
+        getWorldSize() * 2,
+        divisions,
+        0x303030,
+        0x1a1a1a
+      );
+      scene.add(gridHelper);
+    
+      groundPlane = new THREE.Mesh(
+        new THREE.PlaneGeometry(getWorldSize() * 2.4, getWorldSize() * 2.4),
+        new THREE.MeshStandardMaterial({
+          color: 0x161616,
+          metalness: 0,
+          roughness: 1
+        })
+      );
+      groundPlane.rotation.x = -Math.PI / 2;
+      groundPlane.position.y = -0.02;
+      scene.add(groundPlane);
+    }
+
+    function resetWorldForSizeChange() {
+      [...rats].forEach((r) => r.die(true));
+      [...food].forEach((f) => f.eat());
+      [...colonies].forEach((c) => c.dispose());
+      [...digSites].forEach((d) => d.dispose());
+      rats = [];
+      food = [];
+      colonies = [];
+      digSites = [];
+      generationCount = 0;
+      rebuildGrid();
+      initSimulation();
+    }
+
+    function randomWorldPosition(scale = 1.5) {
+      const size = getWorldSize();
+      return new THREE.Vector3(
+        (Math.random() - 0.5) * size * scale,
+        0,
+        (Math.random() - 0.5) * size * scale
+      );
+    }
+
+    function ensureDigSites() {
+      if (!params.allowBuilding) return;
+      const desired = Math.max(6, Math.floor(getWorldSize() * 0.35));
+      while (digSites.length < desired) {
+        digSites.push(new DigSite(randomWorldPosition(1.6)));
+      }
+    }
+
+    class Colony {
+      constructor(pos) {
+        this.id = Math.random().toString(36).slice(2);
+        this.pos = pos.clone();
+        this.hue = Math.random();
+        this.members = new Set();
+    
+        this.stockpile = 0;
+        this.foodStored = 0;
+        this.dirtStored = 0;
+        this.level = 1;
+    
+        this.group = new THREE.Group();
+        this.blocksGroup = new THREE.Group();
+        this.foodGroup = new THREE.Group();
+        this.builtBlocks = [];
+    
+        this.base = new THREE.Mesh(
+          new THREE.CylinderGeometry(2.4, 2.8, 0.35, 16),
+          new THREE.MeshStandardMaterial({
+            color: new THREE.Color().setHSL(this.hue, 0.35, 0.28),
+            metalness: 0.03,
+            roughness: 1
+          })
+        );
+        this.base.position.copy(this.pos);
+        this.base.position.y = 0.08;
+    
+        this.ring = new THREE.Mesh(
+          new THREE.TorusGeometry(2.1, 0.06, 8, 40),
+          new THREE.MeshStandardMaterial({
+            color: new THREE.Color().setHSL(this.hue, 0.8, 0.62),
+            emissive: new THREE.Color().setHSL(this.hue, 0.7, 0.18),
+            emissiveIntensity: 0.35,
+            metalness: 0.1,
+            roughness: 0.6
+          })
+        );
+        this.ring.rotation.x = Math.PI / 2;
+        this.ring.position.copy(this.pos);
+        this.ring.position.y = 0.03;
+    
+        this.entrance = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.75, 0.95, 0.22, 16),
+          new THREE.MeshStandardMaterial({
+            color: 0x050505,
+            metalness: 0,
+            roughness: 1
+          })
+        );
+        this.entrance.position.copy(this.pos);
+        this.entrance.position.y = -0.02;
+    
+        this.tunnel1 = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.16, 0.22, 1.8, 8),
+          new THREE.MeshStandardMaterial({
+            color: 0x141414,
+            metalness: 0,
+            roughness: 1
+          })
+        );
+        this.tunnel1.position.copy(this.pos);
+        this.tunnel1.position.set(this.pos.x + 0.4, -0.5, this.pos.z - 0.4);
+        this.tunnel1.rotation.z = Math.PI * 0.28;
+    
+        this.tunnel2 = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.14, 0.2, 1.5, 8),
+          new THREE.MeshStandardMaterial({
+            color: 0x111111,
+            metalness: 0,
+            roughness: 1
+          })
+        );
+        this.tunnel2.position.copy(this.pos);
+        this.tunnel2.position.set(this.pos.x - 0.45, -0.45, this.pos.z + 0.3);
+        this.tunnel2.rotation.x = Math.PI * 0.25;
+    
+        this.group.add(
+          this.base,
+          this.ring,
+          this.entrance,
+          this.tunnel1,
+          this.tunnel2,
+          this.blocksGroup,
+          this.foodGroup
+        );
+        colonyGroup.add(this.group);
+    
+        this.blockPattern = this.createBlockPattern();
+        this.updateVisual();
+      }
+    
+      createBlockPattern() {
+        const pattern = [];
+        const yStep = 0.32;
+        const add = (x, y, z) => pattern.push(new THREE.Vector3(x, y, z));
+    
+        const ring = [
+          [-2, 0, -1],
+          [-2, 0, 0],
+          [-2, 0, 1],
+          [-1, 0, -2],
+          [-1, 0, 2],
+          [0, 0, -2],
+          [0, 0, 2],
+          [1, 0, -2],
+          [1, 0, 2],
+          [2, 0, -1],
+          [2, 0, 0],
+          [2, 0, 1],
+          [-1, 0, -1],
+          [-1, 0, 1],
+          [1, 0, -1],
+          [1, 0, 1]
+        ];
+    
+        ring.forEach(([x, y, z]) => add(x, y * yStep, z));
+    
+        const outer = [
+          [-3, 0, 0],
+          [3, 0, 0],
+          [0, 0, -3],
+          [0, 0, 3],
+          [-2, 0, -2],
+          [-2, 0, 2],
+          [2, 0, -2],
+          [2, 0, 2]
+        ];
+    
+        outer.forEach(([x, y, z]) => add(x, y * yStep, z));
+    
+        const upper = [
+          [-1, 1, -2],
+          [-1, 1, 2],
+          [1, 1, -2],
+          [1, 1, 2],
+          [-2, 1, -1],
+          [-2, 1, 1],
+          [2, 1, -1],
+          [2, 1, 1],
+          [-1, 1, -1],
+          [-1, 1, 1],
+          [1, 1, -1],
+          [1, 1, 1],
+          [0, 1, -2],
+          [0, 1, 2]
+        ];
+    
+        upper.forEach(([x, y, z]) => add(x, y * yStep, z));
+    
+        const top = [
+          [-1, 2, 0],
+          [1, 2, 0],
+          [0, 2, -1],
+          [0, 2, 1],
+          [0, 2, 0]
+        ];
+    
+        top.forEach(([x, y, z]) => add(x, y * yStep, z));
+    
+        return pattern;
+      }
+    
+      addMember(rat) {
+        this.members.add(rat);
+      }
+    
+      removeMember(rat) {
+        this.members.delete(rat);
+      }
+    
+      depositDirt(amount = 1) {
+        this.dirtStored += amount;
+        this.stockpile += amount;
+    
+        while (
+          this.dirtStored >= 1 &&
+          this.builtBlocks.length < this.blockPattern.length
+        ) {
+          this.dirtStored -= 1;
+          this.placeNextBlock();
+        }
+    
+        this.level = 1 + Math.floor(this.builtBlocks.length / 8);
+        this.updateVisual();
+      }
+    
+      depositFood(amount = 1) {
+        this.foodStored += amount;
+        this.updateFoodVisual();
+      }
+    
+      tryConsumeFood(amount = 12) {
+        if (this.foodStored <= 0) return 0;
+        const eaten = Math.min(this.foodStored, amount);
+        this.foodStored -= eaten;
+        this.updateFoodVisual();
+        return eaten;
+      }
+    
+      placeNextBlock() {
+        const i = this.builtBlocks.length;
+        const p = this.blockPattern[i];
+        if (!p) return;
+    
+        const block = new THREE.Mesh(
+          new THREE.BoxGeometry(0.32, 0.32, 0.32),
+          new THREE.MeshStandardMaterial({
+            color: new THREE.Color().setHSL(this.hue, 0.18, 0.33),
+            metalness: 0.02,
+            roughness: 1
+          })
+        );
+    
+        block.position.set(
+          this.pos.x + p.x * 0.38,
+          0.16 + p.y,
+          this.pos.z + p.z * 0.38
+        );
+    
+        block.rotation.y = Math.floor(Math.random() * 4) * (Math.PI / 2);
+        this.blocksGroup.add(block);
+        this.builtBlocks.push(block);
+      }
+    
+      updateFoodVisual() {
+        while (this.foodGroup.children.length > 0) {
+          this.foodGroup.remove(this.foodGroup.children[0]);
+        }
+    
+        const shown = Math.min(10, Math.floor(this.foodStored));
+        for (let i = 0; i < shown; i++) {
+          const cheese = cheeseModel.clone();
+          const angle = (i / Math.max(1, shown)) * Math.PI * 2;
+          const radius = 0.8 + (i % 3) * 0.18;
+          cheese.position.set(
+            this.pos.x + Math.cos(angle) * radius,
+            0.18 + Math.floor(i / 4) * 0.14,
+            this.pos.z + Math.sin(angle) * radius
+          );
+          cheese.rotation.set(
+            Math.random() * 0.4,
+            Math.random() * Math.PI * 2,
+            Math.random() * 0.4
+          );
+          cheese.scale.setScalar(0.65);
+          this.foodGroup.add(cheese);
+        }
+      }
+    
+      getBonusRadius() {
+        return 5 + this.level * 1.8;
+      }
+    
+      getEnergyReduction() {
+        return Math.min(0.3, this.level * 0.05);
+      }
+    
+      getReproductionBonus() {
+        return Math.min(16, this.level * 3);
+      }
+    
+      getPredatorProtection() {
+        return Math.min(0.45, this.builtBlocks.length * 0.01);
+      }
+    
+      updateVisual() {
+        this.ring.scale.setScalar(1 + this.level * 0.05);
+        this.base.scale.setScalar(1 + this.level * 0.03);
+        this.updateFoodVisual();
+      }
+    
+      dispose() {
+        colonyGroup.remove(this.group);
+      }
+    }
+
+    class DigSite {
+      constructor(pos) {
+        this.pos = pos.clone();
+        this.amount = 9999;
+        this.mesh = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.45, 0.65, 0.18, 8),
+          new THREE.MeshStandardMaterial({
+            color: 0x2c2119,
+            metalness: 0,
+            roughness: 1
+          })
+        );
+        this.mesh.position.copy(this.pos);
+        this.mesh.position.y = 0.09;
+        digGroup.add(this.mesh);
+      }
+
+      mine() {
+        this.mesh.scale.y = 0.7 + Math.random() * 0.3;
+      }
+
+      dispose() {
+        digGroup.remove(this.mesh);
+      }
+    }
+
+    function findNearestColony(pos) {
+      let best = null;
+      let bestDist = Infinity;
+      colonies.forEach((colony) => {
+        const d = colony.pos.distanceTo(pos);
+        if (d < bestDist) {
+          bestDist = d;
+          best = colony;
+        }
+      });
+      return best;
+    }
+
+    function createColonyNear(pos) {
+      const colony = new Colony(pos);
+      colonies.push(colony);
+      return colony;
+    }
+
+    class Rat {
+      constructor(pos, genes = null, colony = null) {
+        this.pos = pos.clone();
+        this.dir = Math.random() * Math.PI * 2;
+        this.energy = RAT_START_ENERGY;
+        this.age = 0;
+        this.generation = genes ? genes.generation + 1 : 1;
+        this.state = "wander";
+        this.carryingDirt = false;
+        this.carryingFood = false;
+        this.targetDigSite = null;
+        this.colony = colony || null;
+        this.worldSizeSnapshot = getWorldSize();
+
+        this.genes = genes
+          ? { ...genes }
+          : {
+              speed: 2.0,
+              size: 1.0,
+              sense: 12.0,
+              lifespan: 40.0,
+              squish: 1.0,
+              glitch: 0.0,
+              hue: Math.random(),
+              aggression: 0.1,
+              generation: 1
+            };
+
+        if (genes) {
+          const m = params.mutation;
+          const mutate = (val, factor) =>
+            val + (Math.random() - 0.5) * m * factor;
+          this.genes.speed = THREE.MathUtils.clamp(
+            mutate(this.genes.speed, 2),
+            0.5,
+            8
+          );
+          this.genes.size = THREE.MathUtils.clamp(
+            mutate(this.genes.size, 0.5),
+            0.3,
+            3
+          );
+          this.genes.sense = THREE.MathUtils.clamp(
+            mutate(this.genes.sense, 10),
+            5,
+            40
+          );
+          this.genes.lifespan = THREE.MathUtils.clamp(
+            mutate(this.genes.lifespan, 15),
+            10,
+            100
+          );
+          this.genes.squish = THREE.MathUtils.clamp(
+            mutate(this.genes.squish, 0.8),
+            0.2,
+            3
+          );
+          this.genes.glitch = THREE.MathUtils.clamp(
+            mutate(this.genes.glitch, 0.4),
+            0,
+            1
+          );
+          this.genes.hue =
+            (this.genes.hue +
+              (Math.random() - 0.5) * m * 0.2 +
+              1) %
+            1;
+          this.genes.aggression = THREE.MathUtils.clamp(
+            mutate(this.genes.aggression, 0.5),
+            0,
+            1
+          );
+        }
+
+        this.mesh = ratModel.clone();
+       this.carryMesh = new THREE.Mesh(
+          new THREE.BoxGeometry(0.18, 0.18, 0.18),
+          new THREE.MeshStandardMaterial({
+            color: 0x6a4d34,
+            roughness: 1,
+            metalness: 0
+          })
+        );
+        this.carryMesh.position.set(0, 0.85, -0.15);
+        this.carryMesh.visible = false;
+        
+        this.foodCarryMesh = cheeseModel.clone();
+        this.foodCarryMesh.position.set(0, 0.88, -0.15);
+        this.foodCarryMesh.scale.setScalar(0.45);
+        this.foodCarryMesh.visible = false;
+        
+        this.mesh.add(this.carryMesh);
+        this.mesh.add(this.foodCarryMesh);
+
+        if (params.allowBuilding && !this.colony) {
+          const nearby = findNearestColony(this.pos);
+          if (nearby && nearby.pos.distanceTo(this.pos) < 14) {
+            this.colony = nearby;
+          } else if (colonies.length < Math.max(2, Math.floor(getWorldSize() / 18))) {
+            this.colony = createColonyNear(
+              this.pos.clone().add(
+                new THREE.Vector3(
+                  (Math.random() - 0.5) * 4,
+                  0,
+                  (Math.random() - 0.5) * 4
+                )
+              )
+            );
+          }
+        }
+
+        if (this.colony) {
+          this.colony.addMember(this);
+        }
+
+        this.updateMeshStyle();
+        ratGroup.add(this.mesh);
+      }
+
+      getDisplayHue() {
+        if (this.colony) {
+          return (this.colony.hue * 0.8 + this.genes.hue * 0.2) % 1;
+        }
+        return this.genes.hue;
+      }
+
+      updateMeshStyle() {
+        const s = this.genes.size * 1.5;
+        const sy = s * this.genes.squish;
+        const sxz = s / Math.sqrt(this.genes.squish);
+        this.mesh.scale.set(sxz, sy, sxz);
+
+        const hue = this.getDisplayHue();
+
+        this.mesh.traverse((child) => {
+          if (child.isMesh && child !== this.carryMesh) {
+            child.material = child.material.clone();
+            child.material.color.setHSL(hue, 0.65, 0.6);
+            child.material.emissive.setHSL(hue, 0.4, 0.05);
+            child.material.emissiveIntensity = 0.25;
+            if (this.genes.aggression > 0.6) {
+              child.material.emissive.setHSL(0, 1, 0.22);
+            }
+          }
+        });
+      }
+
+      maybeAssignColony() {
+        if (!params.allowBuilding) return;
+        if (this.colony) return;
+
+        const nearby = findNearestColony(this.pos);
+        if (nearby && nearby.pos.distanceTo(this.pos) < 15) {
+          this.colony = nearby;
+          this.colony.addMember(this);
+          this.updateMeshStyle();
+          return;
+        }
+
+        if (
+          colonies.length < Math.max(2, Math.floor(getWorldSize() / 18)) &&
+          Math.random() < 0.0008
+        ) {
+          this.colony = createColonyNear(this.pos.clone());
+          this.colony.addMember(this);
+          this.updateMeshStyle();
+        }
+      }
+
+      moveToward(targetPos, turnStrength = 0.15) {
+        const angleToTarget = Math.atan2(
+          targetPos.x - this.pos.x,
+          targetPos.z - this.pos.z
+        );
+        this.dir += (angleToTarget - this.dir) * turnStrength;
+      }
+
+      getNestDistance() {
+        if (!this.colony) return Infinity;
+        return this.pos.distanceTo(this.colony.pos);
+      }
+
+      builtNeedMoreDirt() {
+        if (!this.colony) return false;
+        return this.colony.builtBlocks.length < this.colony.blockPattern.length;
+      }
+      
+
+      handleBuildingBehavior() {
+        if (!params.allowBuilding || !this.colony) return false;
+        if (this.energy < 25) return false;
+      
+        if (this.carryingDirt) {
+          this.state = "returnNest";
+          this.moveToward(this.colony.pos, 0.18);
+          const d = this.pos.distanceTo(this.colony.pos);
+          if (d < 2.2) {
+            this.carryingDirt = false;
+            this.carryMesh.visible = false;
+            this.colony.depositDirt(1);
+          }
+          return true;
+        }
+      
+        if (this.carryingFood) {
+          this.state = "returnNestFood";
+          this.moveToward(this.colony.pos, 0.18);
+          const d = this.pos.distanceTo(this.colony.pos);
+          if (d < 2.2) {
+            this.carryingFood = false;
+            this.foodCarryMesh.visible = false;
+            this.colony.depositFood(1);
+          }
+          return true;
+        }
+      
+        if (this.colony.foodStored < 6) {
+          let nearestFood = null;
+          let nearestFoodDist = Infinity;
+      
+          food.forEach((f) => {
+            const d = this.pos.distanceTo(f.pos);
+            if (d < nearestFoodDist && d < this.genes.sense * 1.5) {
+              nearestFoodDist = d;
+              nearestFood = f;
+            }
+          });
+      
+          if (nearestFood) {
+            this.state = "seekFoodForNest";
+            this.moveToward(nearestFood.pos, 0.16);
+      
+            if (nearestFoodDist < 0.6 + this.genes.size * 0.3) {
+              nearestFood.eat();
+              this.carryingFood = true;
+              this.foodCarryMesh.visible = true;
+            }
+            return true;
+          }
+        }
+      
+        if (
+          this.builtNeedMoreDirt() ||
+          Math.random() < 0.02
+        ) {
+          let nearest = null;
+          let nearestDist = Infinity;
+      
+          digSites.forEach((site) => {
+            const d = this.pos.distanceTo(site.pos);
+            if (d < nearestDist && d < this.genes.sense * 1.4) {
+              nearestDist = d;
+              nearest = site;
+            }
+          });
+      
+          if (nearest) {
+            this.targetDigSite = nearest;
+            this.state = "seekDirt";
+            this.moveToward(nearest.pos, 0.16);
+      
+            if (nearestDist < 0.8 + this.genes.size * 0.2) {
+              nearest.mine();
+              this.carryingDirt = true;
+              this.carryMesh.visible = true;
+            }
+            return true;
+          }
+        }
+      
+        return false;
+      }
+
+      update(dt) {
+        this.age += dt;
+        this.maybeAssignColony();
+
+        let energyDrain =
+          dt *
+          (1 +
+            this.genes.speed * 0.2 +
+            this.genes.size * 0.3 +
+            this.genes.glitch * 2);
+
+        if (this.colony && this.getNestDistance() < this.colony.getBonusRadius()) {
+          energyDrain *= 1 - this.colony.getEnergyReduction();
+        }
+
+        this.energy -= energyDrain;
+
+        if (this.energy <= 0 || this.age > this.genes.lifespan) {
+          this.die();
+          return;
+        }
+
+        if (
+          this.colony &&
+          this.getNestDistance() < this.colony.getBonusRadius() &&
+          this.energy < 35 &&
+          this.colony.foodStored > 0
+        ) {
+          this.energy = Math.min(
+            RAT_ENERGY_MAX + 40,
+            this.energy + this.colony.tryConsumeFood(10)
+          );
+        }
+        
+
+        let target = null;
+        let targetType = "food";
+        let minDist = this.genes.sense;
+
+        food.forEach((f) => {
+          const d = this.pos.distanceTo(f.pos);
+          if (d < minDist) {
+            minDist = d;
+            target = f;
+            targetType = "food";
+          }
+        });
+
+        if (this.genes.aggression > params.cannibalismThreshold) {
+          rats.forEach((other) => {
+            if (other === this) return;
+            if (
+              this.colony &&
+              other.colony &&
+              this.colony === other.colony
+            ) {
+              return;
+            }
+            const d = this.pos.distanceTo(other.pos);
+            if (
+              d < minDist &&
+              other.genes.size < this.genes.size * 1.2
+            ) {
+              minDist = d;
+              target = other;
+              targetType = "rat";
+            }
+          });
+        }
+
+        const buildingHandled = this.handleBuildingBehavior();
+
+        if (!buildingHandled) {
+          if (target) {
+            const targetPos = target.pos || target.mesh.position;
+            this.moveToward(targetPos, 0.15);
+
+            if (minDist < 0.6 + this.genes.size * 0.3) {
+              if (targetType === "food") {
+                if (
+                  params.allowBuilding &&
+                  this.colony &&
+                  this.colony.foodStored < 5 &&
+                  Math.random() < 0.45
+                ) {
+                  target.eat();
+                  this.carryingFood = true;
+                  this.foodCarryMesh.visible = true;
+                } else {
+                  this.energy = Math.min(
+                    RAT_ENERGY_MAX + 80,
+                    this.energy + params.foodNutrition
+                  );
+                  target.eat();
+                }
+              } else {
+                this.energy = Math.min(
+                  RAT_ENERGY_MAX + 120,
+                  this.energy + target.energy * 0.8 + 20
+                );
+                target.die();
+              }
+            }
+          } else if (
+            params.allowBuilding &&
+            this.colony &&
+            this.getNestDistance() > this.colony.getBonusRadius() * 1.7 &&
+            Math.random() < 0.05
+          ) {
+            this.state = "returnNest";
+            this.moveToward(this.colony.pos, 0.1);
+          } else {
+            this.state = "wander";
+            this.dir += (Math.random() - 0.5) * 0.4;
+          }
+        }
+
+        if (
+          this.genes.glitch > 0.1 &&
+          Math.random() < this.genes.glitch * 0.05
+        ) {
+          this.pos.x += (Math.random() - 0.5) * 5 * this.genes.glitch;
+          this.pos.z += (Math.random() - 0.5) * 5 * this.genes.glitch;
+          this.spawnGhost();
+        }
+
+        const moveSpeed = this.genes.speed * params.speed;
+        this.pos.x += Math.sin(this.dir) * moveSpeed * dt;
+        this.pos.z += Math.cos(this.dir) * moveSpeed * dt;
+
+        const limit = getWorldSize() - 2;
+        if (this.pos.x > limit) {
+          this.pos.x = limit;
+          this.dir += Math.PI;
+        }
+        if (this.pos.x < -limit) {
+          this.pos.x = -limit;
+          this.dir += Math.PI;
+        }
+        if (this.pos.z > limit) {
+          this.pos.z = limit;
+          this.dir += Math.PI;
+        }
+        if (this.pos.z < -limit) {
+          this.pos.z = -limit;
+          this.dir += Math.PI;
+        }
+
+        this.mesh.position.copy(this.pos);
+        this.mesh.rotation.y = this.dir + Math.PI;
+        const wobble = Math.abs(Math.sin(this.age * 12 * params.speed)) * 0.2;
+        this.mesh.position.y = wobble * this.genes.size;
+
+        const stretch = 1 + Math.sin(this.age * 20) * 0.1;
+        this.mesh.scale.y *= stretch;
+
+        let reproductionThreshold = params.reproductionThreshold;
+        if (
+          this.colony &&
+          this.getNestDistance() < this.colony.getBonusRadius()
+        ) {
+          reproductionThreshold -= this.colony.getReproductionBonus();
+        }
+
+        if (this.energy > reproductionThreshold) {
+          this.energy -= RAT_REPRODUCE_COST;
+          const baby = new Rat(this.pos, this.genes, this.colony);
+          rats.push(baby);
+          if (baby.generation > generationCount) {
+            generationCount = baby.generation;
+          }
+        }
+
+        if (params.insanity > 0.5) {
+          this.mesh.traverse((child) => {
+            if (child.isMesh) {
+              if (params.insanity > 0.8 && Math.random() > 0.98) {
+                child.visible = !child.visible;
+              }
+              if (params.insanity > 0.9) {
+                child.rotation.x += Math.random() * 0.1;
+                child.rotation.z += Math.random() * 0.1;
+              }
+            }
+          });
+        }
+      }
+
+      spawnGhost() {
+        const ghost = this.mesh.clone();
+        ghost.traverse((c) => {
+          if (c.isMesh) {
+            c.material = c.material.clone();
+            c.material.transparent = true;
+            c.material.opacity = 0.4;
+          }
+        });
+        scene.add(ghost);
+        setTimeout(() => scene.remove(ghost), 200);
+      }
+
+      die(force = false) {
+        if (this.colony) {
+          this.colony.removeMember(this);
+        }
+        ratGroup.remove(this.mesh);
+        const idx = rats.indexOf(this);
+        if (idx > -1) rats.splice(idx, 1);
+
+        if (!force && params.allowBuilding && this.colony && Math.random() < 0.35) {
+          const dropPos = this.pos.clone();
+          food.push(new Food(dropPos));
+        }
+      }
+    }
+
+    class Food {
+      constructor(pos) {
+        this.pos = pos.clone();
+        this.age = 0;
+        this.mesh = cheeseModel.clone();
+        this.mesh.position.copy(this.pos);
+        this.mesh.rotation.set(
+          Math.random(),
+          Math.random(),
+          Math.random()
+        );
+        foodGroup.add(this.mesh);
+      }
+
+      update(dt) {
+        this.age += dt;
+        this.mesh.rotation.y += dt * 0.6;
+        this.mesh.position.y = Math.sin(this.age * 3) * 0.05 + 0.1;
+        if (this.age > FOOD_LIFESPAN) {
+          this.eat();
+        }
+      }
+
+      eat() {
+        foodGroup.remove(this.mesh);
+        const idx = food.indexOf(this);
+        if (idx > -1) food.splice(idx, 1);
+      }
+    }
+
+    class Predator {
+      constructor() {
+        this.pos = new THREE.Vector3(0, 50, 0);
+        this.targetPos = new THREE.Vector3(0, 0, 0);
+        this.state = "hover";
+        this.timer = 0;
+        this.active = true;
+
+        const loader = new THREE.TextureLoader();
+        const tex = loader.load("fist.png");
+        tex.magFilter = THREE.NearestFilter;
+        tex.minFilter = THREE.NearestFilter;
+        const mat = new THREE.SpriteMaterial({
+          map: tex,
+          color: 0xffffff,
+          transparent: true
+        });
+        this.sprite = new THREE.Sprite(mat);
+        this.sprite.scale.set(15, 15, 1);
+        scene.add(this.sprite);
+      }
+
+      update(dt) {
+        if (!this.active) {
+          this.sprite.visible = false;
+          return;
+        }
+
+        this.sprite.visible = true;
+        this.timer += dt;
+
+        if (this.state === "hover") {
+          this.targetPos.x = Math.sin(this.timer * 0.5) * getWorldSize() * 0.8;
+          this.targetPos.z = Math.cos(this.timer * 0.5) * getWorldSize() * 0.8;
+          this.targetPos.y = 20 + Math.sin(this.timer * 2) * 5;
+
+          if (this.timer > params.predatorFrequency) {
+            this.state = "slam";
+            this.timer = 0;
+            if (rats.length > 0) {
+              const r = rats[Math.floor(Math.random() * rats.length)];
+              this.targetPos.copy(r.pos);
+            }
+          }
+        } else if (this.state === "slam") {
+          this.targetPos.y = -2;
+          if (this.pos.y < 2) {
+            this.checkKill();
+            this.state = "retreat";
+            this.timer = 0;
+          }
+        } else if (this.state === "retreat") {
+          this.targetPos.y = 50;
+          if (this.pos.y > 45) {
+            this.state = "hover";
+            this.timer = 0;
+          }
+        }
+
+        this.pos.lerp(
+          this.targetPos,
+          dt * (this.state === "slam" ? 10 : 2)
+        );
+        this.sprite.position.copy(this.pos);
+        this.sprite.rotation.y = Math.atan2(
+          camera.position.x - this.pos.x,
+          camera.position.z - this.pos.z
+        );
+      }
+
+      checkKill() {
+        const killRadius = params.predatorRadius;
+        rats.slice().forEach((r) => {
+          let effectiveRadius = killRadius;
+          if (
+            params.allowBuilding &&
+            r.colony &&
+            r.pos.distanceTo(r.colony.pos) < r.colony.getBonusRadius() * 0.8
+          ) {
+            effectiveRadius *= 1 - r.colony.getPredatorProtection();
+          }
+
+          if (
+            r.pos.distanceTo(
+              new THREE.Vector3(this.pos.x, 0, this.pos.z)
+            ) < effectiveRadius
+          ) {
+            r.die();
+          }
+        });
+      }
+    }
+
+    let predator = null;
+
+    function initSimulation() {
+      if (!predator) predator = new Predator();
+      if (params.allowBuilding) {
+        const colonyCount = Math.max(2, Math.floor(getWorldSize() / 20));
+        for (let i = 0; i < colonyCount; i++) {
+          colonies.push(new Colony(randomWorldPosition(1.0)));
+        }
+        ensureDigSites();
+      }
+
+      for (let i = 0; i < 15; i++) {
+        const pos = randomWorldPosition(1.5);
+        let colony = null;
+        if (params.allowBuilding && colonies.length > 0) {
+          colony = findNearestColony(pos);
+        }
+        rats.push(new Rat(pos, null, colony));
+      }
+    }
+
+    function spawnFood() {
+      if (food.length < params.foodDensity) {
+        const pos = randomWorldPosition(1.8);
+        food.push(new Food(pos));
+      }
+    }
+
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+
+    window.addEventListener("mousedown", (e) => {
+      if (e.target !== canvas) return;
+      mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+      raycaster.setFromCamera(mouse, camera);
+      const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+      const intersect = new THREE.Vector3();
+      if (raycaster.ray.intersectPlane(plane, intersect)) {
+        let colony = null;
+        if (params.allowBuilding && colonies.length > 0) {
+          colony = findNearestColony(intersect);
+        }
+        rats.push(new Rat(intersect, null, colony));
+      }
+    });
+
+    const sliders = document.querySelectorAll(".strange-slider");
+    const sliderStates = [];
+
+    sliders.forEach((slider) => {
+      const min = parseFloat(slider.dataset.min);
+      const max = parseFloat(slider.dataset.max);
+      let targetVal = parseFloat(slider.dataset.val);
+      let currentVal = targetVal;
+      let dragging = false;
+      const fill = slider.querySelector(".white-text-wrap");
+
+      const updateUI = () => {
+        const percent = (currentVal - min) / (max - min);
+        fill.style.width = percent * 100 + "%";
+      };
+
+      const handleMove = (clientX) => {
+        const rect = slider.getBoundingClientRect();
+        const percent = Math.max(
+          0,
+          Math.min(1, (clientX - rect.left) / rect.width)
+        );
+        targetVal = min + percent * (max - min);
+      };
+
+      slider.addEventListener("mousedown", (e) => {
+        dragging = true;
+        handleMove(e.clientX);
+      });
+      window.addEventListener("mousemove", (e) => {
+        if (dragging) handleMove(e.clientX);
+      });
+      window.addEventListener("mouseup", () => {
+        dragging = false;
+      });
+
+      updateUI();
+
+      sliderStates.push({
+        id: slider.id,
+        update: (dt) => {
+          currentVal += (targetVal - currentVal) * (1 - Math.exp(-15 * dt));
+          updateUI();
+          return currentVal;
+        }
+      });
+    });
+
+    const tweakUI = document.getElementById("tweak-ui");
+    document.getElementById("toggle-ui").onclick = () =>
+      tweakUI.classList.toggle("collapsed");
+
+    const checkPredator = document.getElementById("check-predator");
+    checkPredator.onclick = () => {
+      checkPredator.classList.toggle("checked");
+      if (predator) {
+        predator.active = checkPredator.classList.contains("checked");
+      }
+    };
+
+    const checkBuilding = document.getElementById("check-building");
+    checkBuilding.onclick = () => {
+      checkBuilding.classList.toggle("checked");
+      params.allowBuilding = checkBuilding.classList.contains("checked");
+      resetWorldForSizeChange();
+    };
+
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = Math.min(clock.getDelta(), 0.1);
+      const time = clock.getElapsedTime();
+
+      params.speed = sliderStates[0].update(dt);
+      params.mutation = sliderStates[1].update(dt);
+      params.foodDensity = sliderStates[2].update(dt);
+      params.insanity = sliderStates[3].update(dt);
+      params.reproductionThreshold = sliderStates[4].update(dt);
+      params.foodNutrition = sliderStates[5].update(dt);
+      params.predatorFrequency = sliderStates[6].update(dt);
+      params.predatorRadius = sliderStates[7].update(dt);
+      params.cannibalismThreshold = sliderStates[8].update(dt);
+      params.worldSize = sliderStates[9].update(dt);
+
+      if (Math.abs(params.worldSize - worldSizeCurrent) > 1.5) {
+        worldSizeCurrent = params.worldSize;
+        resetWorldForSizeChange();
+      }
+
+      meltPass.uniforms.intensity.value = params.insanity;
+      meltPass.uniforms.time.value = time;
+
+      const simDt = dt * params.speed;
+
+      if (ratModel) {
+        rats.slice().forEach((r) => r.update(simDt));
+        food.slice().forEach((f) => f.update(simDt));
+
+        if (Math.random() < 0.1 * params.speed) spawnFood();
+        if (params.allowBuilding) ensureDigSites();
+        if (predator) predator.update(simDt);
+
+        if (rats.length === 0) {
+          generationCount = 0;
+          colonies.slice().forEach((c) => c.dispose());
+          digSites.slice().forEach((d) => d.dispose());
+          colonies = [];
+          digSites = [];
+          initSimulation();
+        }
+      }
+
+      if (params.insanity > 0.3) {
+        gridHelper.position.y = Math.sin(time * 2) * params.insanity * 2;
+        renderer.domElement.style.filter = `hue-rotate(${
+          time * 10 * params.insanity
+        }deg) contrast(${1 + params.insanity}) brightness(${
+          1.04 + params.insanity * 0.08
+        })`;
+      } else {
+        gridHelper.position.y = 0;
+        renderer.domElement.style.filter = "brightness(1.05)";
+      }
+
+      document.getElementById("pop-count").textContent = rats.length;
+      document.getElementById("gen-count").textContent = generationCount;
+      document.getElementById("colony-count").textContent = colonies.length;
+
+      const currentDist = camera.position.length();
+      const newDist = currentDist + (targetDistance - currentDist) * 0.05;
+      camera.position.setLength(newDist);
+
+      const totalNestFood = colonies.reduce((sum, c) => sum + c.foodStored, 0);
+      const nestFoodEl = document.getElementById("nest-food-count");
+      if (nestFoodEl) nestFoodEl.textContent = totalNestFood.toFixed(0);
+
+      controls.update();
+      composer.render();
+    }
+
+    window.addEventListener("resize", () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      composer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    animate();
+  </script>
+</body>
+</html>
